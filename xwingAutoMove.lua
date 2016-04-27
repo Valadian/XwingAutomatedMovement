@@ -1,6 +1,7 @@
 -- X-Wing Automatic Movement - Hera Verito (Jstek), March 2016
 -- X-Wing Arch and Range Ruler - Flolania, March 2016
 -- X-Wing Auto Dial Integration - Flolania, March 2016
+-- X-Wing AI Auto movement - Valadian, April 2016
 
 function onload()
     --Auto Movement
@@ -19,6 +20,9 @@ function onload()
     evade = '4a352e'
     stress = 'a25e12'
 
+    -- AI
+    aitype = {}
+    striketarget = nil
     aicardguid = '2d84be'
 
     aicard = getObjectFromGUID(aicardguid)
@@ -415,7 +419,24 @@ function check(guid,move)
     if move == 'ai' then
         auto(guid)
     end
-
+    if move == 'ai strike' then
+        aitype[guid] = 'strike'
+        ship = getObjectFromGUID(guid)
+        printToAll('AI Type For: ' .. ship.getName() .. ' set to STRIKE',{0, 1, 0})
+        setpending(guid)
+    end
+    if move == 'ai attack' then
+        aitype[guid] = nil
+        ship = getObjectFromGUID(guid)
+        printToAll('AI Type For: ' .. ship.getName() .. ' set to ATTACK',{0, 1, 0})
+        setpending(guid)
+    end
+    if move == 'ai target' then
+        striketarget = guid
+        ship = getObjectFromGUID(guid)
+        printToAll('Strike Target Set: ' .. ship.getName(),{0, 0, 1})
+        setpending(guid)
+    end
     -- Straight Commands
     if move == 's0' then
         notify(guid,move,'is stationary')
@@ -741,10 +762,12 @@ end
 
 function auto(guid)
     local ai = getObjectFromGUID(guid)
-    -- tgtGuid = ai.getVar('tgtGuid')
     local tgtGuid
-    if getAiFocus(ai.getName()) then
-        tgtGuid = getAiFocus(ai.getName())
+    --if getAiFocus(ai.getName()) then
+    --    tgtGuid = getAiFocus(ai.getName())
+    if aitype[guid] == 'strike' then
+        tgtGuid = striketarget
+        printToAll(ai.getName() .. " is STRIKE AI",{0,1,0})
     else
         tgtGuid = findNearestPlayer(guid)
     end
@@ -753,14 +776,9 @@ function auto(guid)
         setpending(guid)
     else
         local tgt = getObjectFromGUID(tgtGuid)
-        printToAll(ai.getName() .. " pursues: " .. tgt.getName(),{0,1,0},{0,1,0})
+        printToAll(ai.getName() .. " pursues: " .. tgt.getName(),{0,1,0})
         local aiPos = ai.getPosition()
         local tgtPos = tgt.getPosition()
-        --direction = ai.getRotation()
-        --rotval = round(direction[2])
-        --radrotval = math.rad(rotval)
-        --xForward = math.sin(radrotval) * -1
-        --zForward = math.cos(radrotval) * -1
         local aiForward = getForwardVector(guid)
         local tgtForward = getForwardVector(tgtGuid)
         local offset = {tgtPos[1] - aiPos[1],0,tgtPos[3] - aiPos[3]}
@@ -768,11 +786,6 @@ function auto(guid)
         if angle < 0 then
             angle = angle + 2 * math.pi
         end
-        -- (distance(tgtPos[1],tgtPos[3],aiPos[1],aiPos[3]) - 1)/3.7
-        -- log("Info: " .. ai.getName() .. " Old Range = " .. round((distance(tgtPos[1],tgtPos[3],aiPos[1],aiPos[3]) - 1)/3.7,2))
-        -- log("Info: " .. ai.getName() .. " Distance = " .. round(realDistance(guid,tgtGuid),2))
-        -- log("Info: " .. ai.getName() .. " Range = " .. round(realDistance(guid,tgtGuid)/3.7,2))
-        -- log("Info: " .. ai.getName() .. " Angle= " .. round(angle,2))
         local fleeing = dot(offset,tgtForward)>0
         local move = getMove(getAiType(ai.getName()),angle,realDistance(guid,tgtGuid),fleeing)
 
