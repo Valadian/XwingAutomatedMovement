@@ -24,11 +24,22 @@ function onload()
     aitype = {}
     striketarget = nil
     aicardguid = '2d84be'
+    squadleader = {}
+    squadmove = {}
+    squadposition = {}
+    squadrotation = {}
+    aimove = {}
 
     aicard = getObjectFromGUID(aicardguid)
     if aicard then
-        local flipbutton = {['click_function'] = 'ReadyAiButton', ['label'] = 'Ready AI', ['position'] = {0, 0.3, 0}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 550, ['font_size'] = 550}
+        local flipbutton = {['click_function'] = 'ReadyAiButton', ['label'] = 'Ready AI', ['position'] = {0, 0.3, -1.3}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 550, ['font_size'] = 550}
         aicard.createButton(flipbutton)
+
+        local attackbutton = {['click_function'] = 'AttackAiButton', ['label'] = 'Attack AI', ['position'] = {0, 0.3, 0}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 550, ['font_size'] = 550}
+        aicard.createButton(attackbutton)
+
+        local clearbutton = {['click_function'] = 'ClearAiButton', ['label'] = 'Clear AI', ['position'] = {0, 0.3, 1.3}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 550, ['font_size'] = 550}
+        aicard.createButton(clearbutton)
     end
 end
 
@@ -296,8 +307,9 @@ function take(parent, guid, xoff, yoff, zoff)
     obj = getObjectFromGUID(guid)
     objp = getObjectFromGUID(parent)
     world = obj.getPosition()
+    local offset = RotateVector({xoff, yoff, zoff}, obj.getRotation()[2])
     local params = {}
-    params.position = {world[1]+xoff, world[2]+yoff, world[3]+zoff}
+    params.position = {world[1]+offset[1], world[2]+offset[2], world[3]+offset[3]}
     objp.takeObject(params)
 end
 
@@ -765,6 +777,14 @@ function auto(guid)
     local tgtGuid
     --if getAiFocus(ai.getName()) then
     --    tgtGuid = getAiFocus(ai.getName())
+    local squad = getAiSquad(ai.getName())
+--    if squadmove[squad] ~= nil
+--            and squadrotation[squad] == ai.getRotation[2]
+--            and realDistance(guid,squadleader[squad])<3.7 then
+--        printToAll("Found previous move for [".. squad.."] ".. squadmove[squad],{1,0,0})
+--        executeMove(ai, squadmove[squad])
+--        return
+--    end
     if aitype[guid] == 'strike' then
         tgtGuid = striketarget
         printToAll(ai.getName() .. " is STRIKE AI",{0,1,0})
@@ -788,12 +808,42 @@ function auto(guid)
         end
         local fleeing = dot(offset,tgtForward)>0
         local move = getMove(getAiType(ai.getName()),angle,realDistance(guid,tgtGuid),fleeing)
-
-        ai.setDescription(string.gsub(move,"*",""))
-        if string.find(move,'*') then
-            printToAll('[STRESS - No Action]',{1, 0, 0})
+        if squad ~= nil then
+            printToAll("Setting move for squad [".. squad.."] ".. move,{1,0,0})
+            squadleader[squad] = guid
+            squadmove[squad] = move
+            squadposition[squad] = aiPos
+            squadrotation[squad] = ai.getRotation()[2]
         end
+        aimove[guid] = move
+        executeMove(ai, move)
     end
+end
+
+function AiSquadButton(ai)
+    local squad = getAiSquad(ai.getName())
+    if squad == nil then
+        printToAll("No squad name found (Must be in format '[AI:INT:1] Tie Interceptor Alpha#1')",{1,0,0})
+        setpending(ai.getGUID())
+        return
+    end
+    if squad ~=nil and squadmove[squad] ~= nil then
+        printToAll("Found previous move for [".. squad.."] ".. squadmove[squad],{1,0,0})
+        executeMove(ai, squadmove[squad])
+        State_AIPostMove(ai)
+    else
+        printToAll("No Squad Move Found for ".. squad,{1,0,0})
+        setpending(ai.getGUID())
+        return
+    end
+end
+function executeMove(ai, move)
+    local movestripped = string.gsub(move,"*","")
+    ai.setDescription(movestripped)
+    if string.find(move,'*') then
+        printToAll('[STRESS - No Action]',{1, 0, 0})
+    end
+
 end
 
 function getMove(type, direction,range,fleeing)
@@ -973,30 +1023,303 @@ function getMove(type, direction,range,fleeing)
     return move
 end
 
+function RotateVector(direction, yRotation)
+
+    local rotval = round(yRotation)
+    local radrotval = math.rad(rotval)
+    local xDistance = math.cos(radrotval) * direction[1] + math.sin(radrotval) * direction[3]
+    local zDistance = math.sin(radrotval) * direction[1] * -1 + math.cos(radrotval) * direction[3]
+    return {xDistance, direction[2], zDistance}
+end
+
 function ReadyAiButton()
+    squadleader = {}
+    squadmove = {}
+    squadposition = {}
+    squadrotation = {}
+    aimove = {}
     for i,ship in ipairs(getAllObjects()) do
         if ship.tag == 'Figurine' and ship.getGUID() ~= guid and ship.name ~= '' and isAi(ship.getName()) then
             ship.clearButtons()
             -- Set MOVE button
-            local movebutton = {['click_function'] = 'AiMoveButton', ['label'] = 'Move', ['position'] = {0.3, 0.3, -0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 750, ['height'] = 550, ['font_size'] = 550}
-            ship.createButton(movebutton)
+            -- State_AIMove(ship)
+        end
+    end -- [end loop for all ships]
+
+    local first = FindNextAi(nil, MoveSort)
+
+    if first ~=nil then
+        State_AIMove(first)
+    end
+end
+function ClearAiButton()
+    for i,ship in ipairs(getAllObjects()) do
+        if ship.tag == 'Figurine' and ship.getGUID() ~= guid and ship.name ~= '' and isAi(ship.getName()) then
+            ship.clearButtons()
         end
     end -- [end loop for all ships]
 end
-function AiMoveButton(object)
+function AttackAiButton()
+    for i,ship in ipairs(getAllObjects()) do
+        if ship.tag == 'Figurine' and ship.getGUID() ~= guid and ship.name ~= '' and isAi(ship.getName()) then
+            ship.clearButtons()
+            -- AIAddRuler(ship)
+        end
+    end -- [end loop for all ships]
+    local first = FindNextAi(nil, AttackSort)
+
+    if first ~=nil then
+        AIAddRuler(first)
+        Render_AttackButton(first)
+    end
+end
+function Render_AttackButton(object)
+
+    local attackbutton = {['click_function'] = 'Action_AiAttack', ['label'] = 'Attack', ['position'] = {0, 0.3, 0}, ['rotation'] =  {0, 0, 0}, ['width'] = 750, ['height'] = 550, ['font_size'] = 550}
+    object.createButton(attackbutton)
+end
+function Action_AiAttack(object)
     object.clearButtons()
+    local next = FindNextAi(object.getGUID(),AttackSort)
+
+    if next ~=nil then
+        AIAddRuler(next)
+        Render_AttackButton(next)
+    end
+end
+function FindNextAi(guid, sort)
+    local ais = {}
+    for i,ship in ipairs(getAllObjects()) do
+        if ship.tag == 'Figurine' and ship.name ~= '' and isAi(ship.getName()) then
+            table.insert(ais, ship)
+        end
+    end -- [end loop for all ships]
+    table.sort(ais,sort)
+--    for i,ship in ipairs(ais) do
+--        printToAll(ship.getName(),{0,1,0})
+--    end
+    if guid==nil then
+        return ais[1]
+    else
+        local selffound = false
+        for i,ship in ipairs(ais) do
+            if selffound then printToAll("there is next "..ship.getName(),{0,1,0}) return ship end
+            if ship.getGUID()==guid then selffound = true printToAll("found myself",{0,0,1}) else printToAll("not yet "..ship.getName(),{1,0,0}) end
+        end
+    end
+end
+function AttackSort(a, b)
+    local a_ps = tonumber(getAiSkill(a.getName()))
+    local a_num = tonumber(getAiNumber(a.getName()))
+    local b_ps = tonumber(getAiSkill(b.getName()))
+    local b_num = tonumber(getAiNumber(b.getName()))
+    if a_ps ~= b_ps then
+        return a_ps > b_ps
+    else
+        return a_num<b_num
+    end
+end
+function MoveSort(a, b)
+    local a_ps = tonumber(getAiSkill(a.getName()))
+    local a_num = tonumber(getAiNumber(a.getName()))
+    local b_ps = tonumber(getAiSkill(b.getName()))
+    local b_num = tonumber(getAiNumber(b.getName()))
+    if a_ps ~= b_ps then
+        return a_ps < b_ps
+    else
+        return a_num<b_num
+    end
+end
+function State_AIMove(object)
+    -- Set MOVE button
+    local movebutton = {['click_function'] = 'Action_AiMove', ['label'] = 'Move', ['position'] = {0.3, 0.3, -0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 750, ['height'] = 550, ['font_size'] = 550}
+    object.createButton(movebutton)
+    local squadbutton = {['click_function'] = 'AiSquadButton', ['label'] = 'Squad', ['position'] = {0.3, 0.3, 0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 750, ['height'] = 550, ['font_size'] = 550}
+    object.createButton(squadbutton)
+    if getAiType(object.getName()) == "PHA" then
+        AIAddDecloak(object)
+    end
+end
+function Action_AiMove(object)
     object.setDescription("ai")
 
-    local undobutton = {['click_function'] = 'AiUndoButton', ['label'] = 'q', ['position'] = {-0.8, 0.3, -0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 550}
+    State_AIPostMove(object)
+    local next = FindNextAi(object.getGUID(),MoveSort)
+
+    if next ~=nil then
+        State_AIMove(next)
+    end
+    for i,ship in ipairs(getAllObjects()) do
+        if ship.tag == 'Figurine' and ship.getGUID()~=object.getGUID() and ship.name ~= '' and isAi(ship.getName()) then
+            if next==nil or ship.getGUID()~=next.getGUID() then
+                ship.clearButtons()
+            end
+        end
+    end
+
+
+end
+function State_AIPostMove(object)
+
+    object.clearButtons()
+    AIAddUndo(object)
+
+    AIAddFocusEvade(object)
+
+    AIAddRuler(object)
+
+    if getAiHasBoost(object.getName()) then
+        AIAddBoost(object)
+    end
+
+    if getAiHasBarrelRoll(object.getName()) then
+        AIAddBarrelRoll(object)
+    end
+end
+
+
+function AIAddUndo(object)
+    local undobutton = {['click_function'] = 'AiUndoButton', ['label'] = 'q', ['position'] = {-0.9, 0.3, -0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 550}
     object.createButton(undobutton)
 end
 
 function AiUndoButton(object)
+    if squadleader[object.getGUID()]~=nil then
+        local squad = getAiSquad(ai.getName())
+        squadleader[squad] = nil
+        squadmove[squad] = nil
+        squadposition[squad] = nil
+        squadrotation[squad] = nil
+    end
     object.clearButtons()
     object.setDescription("q")
 
-    local movebutton = {['click_function'] = 'AiMoveButton', ['label'] = 'Move', ['position'] = {0.3, 0.3, -0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 750, ['height'] = 550, ['font_size'] = 550}
-    object.createButton(movebutton)
+    State_AIMove(object)
+end
+
+function AIAddUndoBoostBarrel(object)
+    local undobutton = {['click_function'] = 'Action_AiUndoBoostBarrel', ['label'] = 'q', ['position'] = {-0.9, 0.3, -0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 550}
+    object.createButton(undobutton)
+end
+
+function Action_AiUndoBoostBarrel(object)
+
+    object.clearButtons()
+    object.setDescription("q")
+
+    AIAddRuler(object)
+
+    if getAiHasBoost(object.getName()) then
+        AIAddBoost(object)
+    end
+
+    if getAiHasBarrelRoll(object.getName()) then
+        AIAddBarrelRoll(object)
+    end
+end
+
+function AIAddRuler(object)
+    local rulerbutton = {['click_function'] = 'RulerButton', ['label'] = 'r', ['position'] = {-0.9, 0.3, 0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 550}
+    object.createButton(rulerbutton)
+end
+
+function RulerButton(object)
+    object.setDescription("r")
+end
+
+function AIAddBoost(object)
+
+    local bl1button = {['click_function'] = 'Action_AiBoostLeft', ['label'] = 'bl1', ['position'] = {-1.1, 0.3, -1.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 330, ['height'] = 300, ['font_size'] = 300}
+    object.createButton(bl1button)
+
+    local s1button = {['click_function'] = 'Action_AiBoostStraight', ['label'] = 's1', ['position'] = {0, 0.3, -1.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 300, ['font_size'] = 300}
+    object.createButton(s1button)
+
+    local br1button = {['click_function'] = 'Action_AiBoostRight', ['label'] = 'br1', ['position'] = {1.1, 0.3, -1.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 330, ['height'] = 300, ['font_size'] = 300}
+    object.createButton(br1button)
+end
+
+function AIAddDecloak(object)
+    local decloak = {['click_function'] = 'Action_AiDecloak', ['label'] = 'decloak', ['position'] = {0, 0.3, -1.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 1000, ['height'] = 300, ['font_size'] = 300}
+    object.createButton(decloak)
+end
+
+function Action_AiDecloak(object)
+    local i_roll = math.random(3)
+    local options = {"ce","cs","cr" }
+    object.setDescription(options[i_roll])
+    AIAddUndo(object)
+end
+
+function Action_AiBoostLeft(object)
+    object.setDescription("bl1")
+    object.clearButtons()
+    AIAddUndoBoostBarrel(object)
+    AIAddRuler(object)
+    AIAddFocusEvade(object)
+end
+
+function Action_AiBoostStraight(object)
+    object.setDescription("s1")
+    object.clearButtons()
+    AIAddUndoBoostBarrel(object)
+    AIAddRuler(object)
+    AIAddFocusEvade(object)
+end
+
+function Action_AiBoostRight(object)
+    object.setDescription("br1")
+    object.clearButtons()
+    AIAddUndoBoostBarrel(object)
+    AIAddRuler(object)
+    AIAddFocusEvade(object)
+end
+
+function AIAddBarrelRoll(object)
+
+    local xebbutton = {['click_function'] = 'Action_AiBarrelRollLeft', ['label'] = 'xl', ['position'] = {-1.6, 0.3, 0}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 300, ['font_size'] = 300}
+    object.createButton(xebbutton)
+
+    local xrbbutton = {['click_function'] = 'Action_AiBarrelRollRight', ['label'] = 'xr', ['position'] = {1.6, 0.3, 0}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 300, ['font_size'] = 300}
+    object.createButton(xrbbutton)
+end
+
+function Action_AiBarrelRollLeft(object)
+    object.setDescription("xl")
+    object.clearButtons()
+    AIAddUndoBoostBarrel(object)
+    AIAddRuler(object)
+    AIAddFocusEvade(object)
+end
+
+function Action_AiBarrelRollRight(object)
+    object.setDescription("xr")
+    object.clearButtons()
+    AIAddUndoBoostBarrel(object)
+    AIAddRuler(object)
+    AIAddFocusEvade(object)
+end
+
+function AIAddFocusEvade(object)
+
+    local focusbutton = {['click_function'] = 'AiFocusButton', ['label'] = 'F', ['position'] = {0.9, 0.3, -0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 550}
+    object.createButton(focusbutton)
+
+    local type = getAiType(object.getName());
+    if type == "TIE" or type=="INT" or type == "ADV" or type == "PHA" then
+        local evadebutton = {['click_function'] = 'AiEvadeButton', ['label'] = 'E', ['position'] = {0.9, 0.3, 0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 550}
+        object.createButton(evadebutton)
+    end
+end
+
+
+function AiFocusButton(object)
+    take(focus, object.getGUID(),-0.5,1,-0.5)
+    notify(object.getGUID(),'action','takes a focus token')
+end
+function AiEvadeButton(object)
+    take(evade, object.getGUID(),-0.5,1,0.5)
+    notify(object.getGUID(),'action','takes an evade token')
 end
 
 function getForwardVector(guid)
@@ -1015,18 +1338,30 @@ end
 
 function findNearestPlayer(guid)
     local ai  = getObjectFromGUID(guid)
+    local inarc = getAiType(ai.getName()) == "DEC"
     local distances = {}
+    local angles = {}
 
     for i,ship in ipairs(getAllObjects()) do
         if ship.tag == 'Figurine' and ship.getGUID() ~= guid and ship.name ~= '' and not isAi(ship.getName()) then
             local pos = ship.getPosition()
             -- log("Adding Target: "..ship.getName())
             distances[ship.getGUID()] = realDistance(guid,ship.getGUID())
+
+            local aiPos = ai.getPosition()
+            local aiForward = getForwardVector(guid)
+            local tgtForward = getForwardVector(ship.getGUID())
+            local offset = {pos[1] - aiPos[1],0,pos[3] - aiPos[3]}
+            local angle = math.atan2(offset[3], offset[1]) - math.atan2(aiForward[3], aiForward[1])
+            if angle < 0 then
+                angle = angle + 2 * math.pi
+            end
+            angles[ship.getGUID()] = angle
         end -- [end checking distance to ship]
 
     end -- [end loop for all ships]
 
-    local nearest = nil
+    local nearest
     local minDist = 999999
 
     for guid,dist in pairs(distances) do
@@ -1039,10 +1374,18 @@ function findNearestPlayer(guid)
         end -- [end check for nearest]
 
     end -- [end loop for each distance]
-
-    --    if nearest ~= nil then
-    --        printToAll(ai.getName() .. ' found nearest target: ' .. nearest, {0, 0, 1})
-    --    end -- [end setting TL name and status]
+--    local nearestInArc
+--    minDist = 3.7 * 3
+--    for guid,dist in pairs(distances) do
+--
+--        if angles[guid]<dist < minDist then
+--            minDist = dist
+--            if minDist < 35 then
+--                nearest = guid
+--            end
+--        end -- [end check for nearest]
+--
+--    end -- [end loop for each distance]
 
     return nearest
 end
@@ -1079,15 +1422,21 @@ function getAiType(name)
     end
 end
 function getAiSkill(name)
-    return name:match '^%[AI:?%u*:?(%d*):?%w*].*'
+    return name:match '^%[AI:?%u+:?(%d*)].*'
 end
-function getAiFocus(name)
-    local focus = name:match '^%[AI:?%u*:?%d*:?(%w*)].*'
-    if string.len(focus)>0 then
-        return focus
-    else
-        return nil
-    end
+function getAiSquad(name)
+    return name:match '(%a+)[#%s]?%d+$'
+end
+function getAiNumber(name)
+    return name:match '(%d+)$'
+end
+function getAiHasBoost(name)
+    local type = getAiType(name)
+    return type == "INT"
+end
+function getAiHasBarrelRoll(name)
+    local type = getAiType(name)
+    return type == "TIE" or type == "INT" or type == "ADV"or type == "BOM" or type == "DEF" or type == "PHA"
 end
 
 function contains (tab, val)
