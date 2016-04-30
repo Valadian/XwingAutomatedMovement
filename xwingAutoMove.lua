@@ -1063,13 +1063,13 @@ function AttackAiButton()
     for i,ship in ipairs(getAllObjects()) do
         if ship.tag == 'Figurine' and ship.getGUID() ~= guid and ship.name ~= '' and isAi(ship.getName()) then
             ship.clearButtons()
-            -- AIAddRuler(ship)
+            -- Render_Ruler(ship)
         end
     end -- [end loop for all ships]
     local first = FindNextAi(nil, AttackSort)
 
     if first ~=nil then
-        AIAddRuler(first)
+        Render_Ruler(first)
         Render_AttackButton(first)
     end
 end
@@ -1083,7 +1083,7 @@ function Action_AiAttack(object)
     local next = FindNextAi(object.getGUID(),AttackSort)
 
     if next ~=nil then
-        AIAddRuler(next)
+        Render_Ruler(next)
         Render_AttackButton(next)
     end
 end
@@ -1137,7 +1137,7 @@ function State_AIMove(object)
     local squadbutton = {['click_function'] = 'AiSquadButton', ['label'] = 'Squad', ['position'] = {0.3, 0.3, 0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 750, ['height'] = 550, ['font_size'] = 550}
     object.createButton(squadbutton)
     if getAiType(object.getName()) == "PHA" then
-        AIAddDecloak(object)
+        Render_AiDecloak(object)
     end
 end
 function Action_AiMove(object)
@@ -1162,23 +1162,23 @@ end
 function State_AIPostMove(object)
 
     object.clearButtons()
-    AIAddUndo(object)
+    Render_Undo(object)
 
-    AIAddFocusEvade(object)
+    Render_AiFocusEvade(object)
 
-    AIAddRuler(object)
+    Render_Ruler(object)
 
     if getAiHasBoost(object.getName()) then
-        AIAddBoost(object)
+        Render_Boost(object)
     end
 
     if getAiHasBarrelRoll(object.getName()) then
-        AIAddBarrelRoll(object)
+        Render_BarrelRoll(object)
     end
 end
 
 
-function AIAddUndo(object)
+function Render_Undo(object)
     local undobutton = {['click_function'] = 'AiUndoButton', ['label'] = 'q', ['position'] = {-0.9, 0.3, -0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 550}
     object.createButton(undobutton)
 end
@@ -1197,7 +1197,7 @@ function AiUndoButton(object)
     State_AIMove(object)
 end
 
-function AIAddUndoBoostBarrel(object)
+function Render_AiUndoBoostBarrel(object)
     local undobutton = {['click_function'] = 'Action_AiUndoBoostBarrel', ['label'] = 'q', ['position'] = {-0.9, 0.3, -0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 550}
     object.createButton(undobutton)
 end
@@ -1207,18 +1207,18 @@ function Action_AiUndoBoostBarrel(object)
     object.clearButtons()
     object.setDescription("q")
 
-    AIAddRuler(object)
+    Render_Ruler(object)
 
     if getAiHasBoost(object.getName()) then
-        AIAddBoost(object)
+        Render_Boost(object)
     end
 
     if getAiHasBarrelRoll(object.getName()) then
-        AIAddBarrelRoll(object)
+        Render_BarrelRoll(object)
     end
 end
 
-function AIAddRuler(object)
+function Render_Ruler(object)
     local rulerbutton = {['click_function'] = 'RulerButton', ['label'] = 'r', ['position'] = {-0.9, 0.3, 0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 550}
     object.createButton(rulerbutton)
 end
@@ -1227,7 +1227,7 @@ function RulerButton(object)
     object.setDescription("r")
 end
 
-function AIAddBoost(object)
+function Render_Boost(object)
 
     local bl1button = {['click_function'] = 'Action_AiBoostLeft', ['label'] = 'bl1', ['position'] = {-1.1, 0.3, -1.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 330, ['height'] = 300, ['font_size'] = 300}
     object.createButton(bl1button)
@@ -1239,7 +1239,7 @@ function AIAddBoost(object)
     object.createButton(br1button)
 end
 
-function AIAddDecloak(object)
+function Render_AiDecloak(object)
     local decloak = {['click_function'] = 'Action_AiDecloak', ['label'] = 'decloak', ['position'] = {0, 0.3, -1.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 1000, ['height'] = 300, ['font_size'] = 300}
     object.createButton(decloak)
 end
@@ -1248,34 +1248,34 @@ function Action_AiDecloak(object)
     local i_roll = math.random(3)
     local options = {"ce","cs","cr" }
     object.setDescription(options[i_roll])
-    AIAddUndo(object)
+    Render_Undo(object)
 end
 
 function Action_AiBoostLeft(object)
     object.setDescription("bl1")
     object.clearButtons()
-    AIAddUndoBoostBarrel(object)
-    AIAddRuler(object)
-    AIAddFocusEvade(object)
+    Render_AiUndoBoostBarrel(object)
+    Render_Ruler(object)
+    Render_AiFocusEvade(object)
 end
 
 function Action_AiBoostStraight(object)
     object.setDescription("s1")
     object.clearButtons()
-    AIAddUndoBoostBarrel(object)
-    AIAddRuler(object)
-    AIAddFocusEvade(object)
+    Render_AiUndoBoostBarrel(object)
+    Render_Ruler(object)
+    Render_AiFocusEvade(object)
 end
 
 function Action_AiBoostRight(object)
     object.setDescription("br1")
     object.clearButtons()
-    AIAddUndoBoostBarrel(object)
-    AIAddRuler(object)
-    AIAddFocusEvade(object)
+    Render_AiUndoBoostBarrel(object)
+    Render_Ruler(object)
+    Render_AiFocusEvade(object)
 end
 
-function AIAddBarrelRoll(object)
+function Render_BarrelRoll(object)
 
     local xebbutton = {['click_function'] = 'Action_AiBarrelRollLeft', ['label'] = 'xl', ['position'] = {-1.6, 0.3, 0}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 300, ['font_size'] = 300}
     object.createButton(xebbutton)
@@ -1287,37 +1287,37 @@ end
 function Action_AiBarrelRollLeft(object)
     object.setDescription("xl")
     object.clearButtons()
-    AIAddUndoBoostBarrel(object)
-    AIAddRuler(object)
-    AIAddFocusEvade(object)
+    Render_AiUndoBoostBarrel(object)
+    Render_Ruler(object)
+    Render_AiFocusEvade(object)
 end
 
 function Action_AiBarrelRollRight(object)
     object.setDescription("xr")
     object.clearButtons()
-    AIAddUndoBoostBarrel(object)
-    AIAddRuler(object)
-    AIAddFocusEvade(object)
+    Render_AiUndoBoostBarrel(object)
+    Render_Ruler(object)
+    Render_AiFocusEvade(object)
 end
 
-function AIAddFocusEvade(object)
+function Render_AiFocusEvade(object)
 
-    local focusbutton = {['click_function'] = 'AiFocusButton', ['label'] = 'F', ['position'] = {0.9, 0.3, -0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 550}
+    local focusbutton = {['click_function'] = 'Action_Focus', ['label'] = 'F', ['position'] = {0.9, 0.3, -0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 550}
     object.createButton(focusbutton)
 
     local type = getAiType(object.getName());
     if type == "TIE" or type=="INT" or type == "ADV" or type == "PHA" then
-        local evadebutton = {['click_function'] = 'AiEvadeButton', ['label'] = 'E', ['position'] = {0.9, 0.3, 0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 550}
+        local evadebutton = {['click_function'] = 'Action_Evade', ['label'] = 'E', ['position'] = {0.9, 0.3, 0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 550}
         object.createButton(evadebutton)
     end
 end
 
 
-function AiFocusButton(object)
+function Action_Focus(object)
     take(focus, object.getGUID(),-0.5,1,-0.5)
     notify(object.getGUID(),'action','takes a focus token')
 end
-function AiEvadeButton(object)
+function Action_Evade(object)
     take(evade, object.getGUID(),-0.5,1,0.5)
     notify(object.getGUID(),'action','takes an evade token')
 end
