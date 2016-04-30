@@ -32,13 +32,13 @@ function onload()
 
     aicard = getObjectFromGUID(aicardguid)
     if aicard then
-        local flipbutton = {['click_function'] = 'ReadyAiButton', ['label'] = 'Ready AI', ['position'] = {0, 0.3, -1.3}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 550, ['font_size'] = 550}
+        local flipbutton = {['click_function'] = 'Action_MovePhase', ['label'] = 'AI Move', ['position'] = {0, 0.3, -1.3}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 550, ['font_size'] = 550}
         aicard.createButton(flipbutton)
 
-        local attackbutton = {['click_function'] = 'AttackAiButton', ['label'] = 'Attack AI', ['position'] = {0, 0.3, 0}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 550, ['font_size'] = 550}
+        local attackbutton = {['click_function'] = 'Action_AttackPhase', ['label'] = 'AI Attack ', ['position'] = {0, 0.3, 0}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 550, ['font_size'] = 550}
         aicard.createButton(attackbutton)
 
-        local clearbutton = {['click_function'] = 'ClearAiButton', ['label'] = 'Clear AI', ['position'] = {0, 0.3, 1.3}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 550, ['font_size'] = 550}
+        local clearbutton = {['click_function'] = 'Action_ClearAi', ['label'] = 'Clear AI', ['position'] = {0, 0.3, 1.3}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 550, ['font_size'] = 550}
         aicard.createButton(clearbutton)
     end
 end
@@ -1022,7 +1022,92 @@ function getMove(type, direction,range,fleeing)
 
     return move
 end
+function getSwerve(type, move) 
+    local swerves = {}
+    if type == "SHU" then
+        swerves["*"] = {nil,nil}
+    end
+    -- 1
+    if type == "TIE" or type == "INT" or type == "PHA" then
+        swerves["tl1"] = {nil,"bl2"}
+        swerves["tr1"] = {"br2",nil }
+    end
+    if type == "ADV" then
+        swerves["bl1"] = {"tl2","s2"}
+        swerves["br1"] = {"s2","tr2" }
+    end
+    if type == "DEF" then
+        swerves["tl1*"] = {nil,"bl1"}
+        swerves["bl1"] = {"tl1*","s2"}
+        swerves["br1"] = {"s2","tr1*" }
+        swerves["tr1*"] = {"br1",nil }
+    end
+    if type == "BOM" then
+        swerves["bl1"] = {"tl2*","s1"}
+        swerves["s1"] = {"bl1","bl1"}
+        swerves["br1"] = {"s1","tr2*" }
+    end
+    if type == "DEC" then
+        swerves["bl1"] = {"tl2","s1"}
+        swerves["s1"] = {"bl1","bl1"}
+        swerves["br1"] = {"s1","tr2" }
+    end
+    if type == "SHU" then
+        swerves["bl1"] = {"tl2*","s1"}
+        swerves["s1"] = {"bl1","br1"}
+        swerves["br1"] = {"s1","tr2*"}
+    end
+    -- 2
+    if type == "TIE" or type == "INT" or type == "ADV" or type == "PHA" or type == "DEC" then
 
+        swerves["tl2"] = {nil,"bl2"}
+        swerves["bl2"] = {"tl2","s2"}
+        swerves["s2"] = {"bl2","br2"}
+        swerves["br2"] = {"s2","tr2"}
+        swerves["tr2"] = {"bl2",nil }
+    end
+    if type == "DEF" or type == "BOM" or type == "SHU" then
+        swerves["tl2*"] = {nil,"bl2"}
+        swerves["bl2"] = {"tl2*","s2"}
+        swerves["s2"] = {"bl2","br2"}
+        swerves["br2"] = {"s2","tr2*"}
+        swerves["tr2*"] = {"bl2",nil }
+    end
+    -- 3
+    if type == "TIE" or type == "INT" or type == "ADV" or type == "PHA" or type == "DEF" or type == "BOM" or type == "DEC" then
+        swerves["tl3"] = {nil,"bl3"}
+        swerves["bl3"] = {"tl3","s3"}
+        swerves["s3"] = {"bl3","br3"}
+        swerves["br3"] = {"s3","tr3"}
+        swerves["tr3"] = {"br3",nil }
+    end
+    if type == "SHU" then
+        swerves["bl3*"] = {"tl2*","s3"}
+        swerves["s3"] = {"bl3*","br3*"}
+        swerves["br3*"] = {"s3","tr2*"}
+    end
+    if type == "TIE" or type == "INT" or type == "PHA" then
+        swerves["k3*"] = {"bl3","br3"}
+    end
+    -- 4
+    if type == "TIE" or type == "INT" or type == "ADV" or type == "PHA" or type == "DEF" or type == "BOM" or type == "DEC" then
+        swerves["s4"] = {"bl3","br3"}
+    end
+    if type == "TIE" or type == "ADV" or type == "PHA" then
+        swerves["k4*"] = {"bl3","br3" }
+    end
+    if type == "DEF" then
+        swerves["k4"] = {"bl3","br3" }
+    end
+    --5
+    if type == "TIE" or type == "INT" or type == "ADV" or type == "DEF" then
+
+        swerves["s5"] = {"bl3","br3"}
+    end
+    if type == "INT"  or type == "BOM" then
+        swerves["k5*"] = {"bl3","br3" }
+    end
+end
 function RotateVector(direction, yRotation)
 
     local rotval = round(yRotation)
@@ -1032,7 +1117,7 @@ function RotateVector(direction, yRotation)
     return {xDistance, direction[2], zDistance}
 end
 
-function ReadyAiButton()
+function Action_MovePhase()
     squadleader = {}
     squadmove = {}
     squadposition = {}
@@ -1052,14 +1137,14 @@ function ReadyAiButton()
         State_AIMove(first)
     end
 end
-function ClearAiButton()
+function Action_ClearAi()
     for i,ship in ipairs(getAllObjects()) do
         if ship.tag == 'Figurine' and ship.getGUID() ~= guid and ship.name ~= '' and isAi(ship.getName()) then
             ship.clearButtons()
         end
     end -- [end loop for all ships]
 end
-function AttackAiButton()
+function Action_AttackPhase()
     for i,ship in ipairs(getAllObjects()) do
         if ship.tag == 'Figurine' and ship.getGUID() ~= guid and ship.name ~= '' and isAi(ship.getName()) then
             ship.clearButtons()
