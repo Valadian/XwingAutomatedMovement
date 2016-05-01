@@ -1498,6 +1498,23 @@ function findNearestPlayer(guid)
             local aiPos = ai.getPosition()
             local aiForward = getForwardVector(guid)
             local tgtForward = getForwardVector(ship.getGUID())
+            local tgtCorners = findCorners(ship)
+            for i,corner in ipairs(tgtCorners) do
+                local offset = {corner[1] - aiPos[1],0,corner[3] - aiPos[3]}
+                local angle = math.atan2(offset[3], offset[1]) - math.atan2(aiForward[3], aiForward[1])
+                if angle < 0 then
+                    angle = angle + 2 * math.pi
+                end
+                if angles[ship.getGUID()] == nil then
+                    angles[ship.getGUID()] = angle
+                else
+                    local new_diff = angle
+                    if angle>math.pi then new_diff = math.pi*2 - angle end
+                    local old_diff = angles[ship.getGUID()]
+                    if angles[ship.getGUID()]>math.pi then new_diff = math.pi*2 - angles[ship.getGUID()] end
+                    if new_diff < old_diff then angles[ship.getGUID()] = angle end
+                end
+            end
             local offset = {pos[1] - aiPos[1],0,pos[3] - aiPos[3]}
             local angle = math.atan2(offset[3], offset[1]) - math.atan2(aiForward[3], aiForward[1])
             if angle < 0 then
@@ -1511,6 +1528,19 @@ function findNearestPlayer(guid)
     local nearest
     local minDist = 999999
 
+    local nearestInArc
+    minDist = 3.7 * 3
+    for guid,dist in pairs(distances) do
+
+        local diff = angles[guid]
+        if diff>math.pi then diff = math.pi*2 - diff end
+        if diff<math.pi/4 and dist < minDist then
+            minDist = dist
+            nearestInArc = guid
+        end -- [end check for nearest]
+
+    end -- [end loop for each distance]
+    if nearestInArc ~= nil then return nearestInArc end
     for guid,dist in pairs(distances) do
 
         if dist < minDist then
@@ -1521,22 +1551,21 @@ function findNearestPlayer(guid)
         end -- [end check for nearest]
 
     end -- [end loop for each distance]
---    local nearestInArc
---    minDist = 3.7 * 3
---    for guid,dist in pairs(distances) do
---
---        if angles[guid]<dist < minDist then
---            minDist = dist
---            if minDist < 35 then
---                nearest = guid
---            end
---        end -- [end check for nearest]
---
---    end -- [end loop for each distance]
 
     return nearest
 end
-
+function findCorners(object)
+    local scalar = 0.85
+    if object.name:match '%LGS$' then scalar = 1.63 end
+    local forward = getForwardVector(object.getGUID())
+    local f = {forward[1] * scalar, 0, forward[3] * scalar}
+    local corners = {}
+    corners[1] = { f[1] - f[3], 0,  f[3] + f[1]}
+    corners[2] = { f[1] + f[3], 0,  f[3] - f[1]}
+    corners[3] = {-f[1] - f[3], 0, -f[3] + f[1]}
+    corners[4] = {-f[1] + f[3], 0, -f[3] - f[1] }
+    return corners
+end
 function realDistance(guid1, guid2)
     -- Lazy calc to start. need to go from nearest corner to nearest corner
     local a  = getObjectFromGUID(guid1)
