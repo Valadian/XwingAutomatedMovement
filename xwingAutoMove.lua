@@ -29,6 +29,7 @@ function onload()
     squadposition = {}
     squadrotation = {}
     aimove = {}
+    aiswerved = {}
 
     aicard = getObjectFromGUID(aicardguid)
     if aicard then
@@ -439,7 +440,7 @@ function check(guid,move)
     end
     if move == 'ai attack' then
         aitype[guid] = nil
-        ship = getObjectFromGUID(guid)
+        local ship = getObjectFromGUID(guid)
         printToAll('AI Type For: ' .. ship.getName() .. ' set to ATTACK',{0, 1, 0})
         setpending(guid)
     end
@@ -448,6 +449,10 @@ function check(guid,move)
         ship = getObjectFromGUID(guid)
         printToAll('Strike Target Set: ' .. ship.getName(),{0, 0, 1})
         setpending(guid)
+    end
+    if move == "ai pos" then
+        local ship = getObjectFromGUID(guid)
+        printToAll('Position '..ship.getPosition()[1].." "..ship.getPosition()[2].." "..ship.getPosition()[3],{0,1,0})
     end
     -- Straight Commands
     if move == 's0' then
@@ -635,7 +640,14 @@ function check(guid,move)
     elseif move == 'undo' or move == 'q' then
         undo(guid)
         notify(guid,'q')
+    elseif string.starts(move,"q ") then
+        local nextmove = string.gsub(move,"q ","")
+        undo(guid)
+        executeMove(getObjectFromGUID(guid),nextmove)
     end
+end
+function string.starts(String,Start)
+    return string.sub(String,1,string.len(Start))==Start
 end
 
 function checkpos(guid)
@@ -815,8 +827,9 @@ function auto(guid)
             squadposition[squad] = aiPos
             squadrotation[squad] = ai.getRotation()[2]
         end
-        aimove[guid] = move
         executeMove(ai, move)
+        Render_SwerveLeft(ai,move)
+        Render_SwerveRight(ai,move)
     end
 end
 
@@ -838,12 +851,58 @@ function AiSquadButton(ai)
     end
 end
 function executeMove(ai, move)
+    if aiswerved[ai.getGUID()]~=true then
+        aimove[ai.getGUID()] = move
+    end
     local movestripped = string.gsub(move,"*","")
     ai.setDescription(movestripped)
     if string.find(move,'*') then
         printToAll('[STRESS - No Action]',{1, 0, 0})
     end
+end
+function Render_SwerveLeft(object)
+    local move = aimove[object.getGUID()]
 
+    local swerves = getSwerve(getAiType(object.getName()),move)
+    if swerves ~= nil and swerves[1] ~= nil and aiswerved[object.getGUID()]~=true then
+        local swerve = {['click_function'] = 'Action_SwerveLeft', ['label'] = swerves[1], ['position'] = {-0.6, 0.3, 1.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 400, ['height'] = 300, ['font_size'] = 300}
+        object.createButton(swerve)
+--    else
+--        -- REMOVE SWERVES
+--        for i,button in ipairs(object.getButtons()) do
+--            if button~=nil and button['click_function']:matches "swerve" then
+--                object.removeButton(button['index'])
+--            end
+--        end
+    end
+end
+function Action_SwerveLeft(object)
+    local move = aimove[object.getGUID()]
+    local swerves = getSwerve(getAiType(object.getName()),move)
+    aiswerved[object.getGUID()] = true
+    object.setDescription("q "..swerves[1])
+end
+function Render_SwerveRight(object)
+    local move = aimove[object.getGUID()]
+
+    local swerves = getSwerve(getAiType(object.getName()),move)
+    if swerves ~= nil and swerves[2] ~= nil and aiswerved[object.getGUID()]~=true then
+        local swerve = {['click_function'] = 'Action_SwerveRight', ['label'] = swerves[2], ['position'] = {0.6, 0.3, 1.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 400, ['height'] = 300, ['font_size'] = 300}
+        object.createButton(swerve)
+--    else
+--        -- REMOVE SWERVES
+--        for i,button in ipairs(object.getButtons()) do
+--            if button~=nil and button['click_function']:matches "swerve" then
+--                object.removeButton(button['index'])
+--            end
+--        end
+    end
+end
+function Action_SwerveRight(object)
+    local move = aimove[object.getGUID()]
+    local swerves = getSwerve(getAiType(object.getName()),move)
+    aiswerved[object.getGUID()] = true
+    object.setDescription("q "..swerves[2])
 end
 
 function getMove(type, direction,range,fleeing)
@@ -1022,7 +1081,7 @@ function getMove(type, direction,range,fleeing)
 
     return move
 end
-function getSwerve(type, move) 
+function getSwerve(type, move)
     local swerves = {}
     if type == "SHU" then
         swerves["*"] = {nil,nil}
@@ -1107,6 +1166,7 @@ function getSwerve(type, move)
     if type == "INT"  or type == "BOM" then
         swerves["k5*"] = {"bl3","br3" }
     end
+    return swerves[move]
 end
 function RotateVector(direction, yRotation)
 
@@ -1123,6 +1183,7 @@ function Action_MovePhase()
     squadposition = {}
     squadrotation = {}
     aimove = {}
+    aiswerved = {}
     for i,ship in ipairs(getAllObjects()) do
         if ship.tag == 'Figurine' and ship.getGUID() ~= guid and ship.name ~= '' and isAi(ship.getName()) then
             ship.clearButtons()
@@ -1160,7 +1221,7 @@ function Action_AttackPhase()
 end
 function Render_AttackButton(object)
 
-    local attackbutton = {['click_function'] = 'Action_AiAttack', ['label'] = 'Attack', ['position'] = {0, 0.3, 0}, ['rotation'] =  {0, 0, 0}, ['width'] = 750, ['height'] = 550, ['font_size'] = 550}
+    local attackbutton = {['click_function'] = 'Action_AiAttack', ['label'] = 'Attack', ['position'] = {0, 0.3, -0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 750, ['height'] = 550, ['font_size'] = 550}
     object.createButton(attackbutton)
 end
 function Action_AiAttack(object)
@@ -1175,7 +1236,7 @@ end
 function FindNextAi(guid, sort)
     local ais = {}
     for i,ship in ipairs(getAllObjects()) do
-        if ship.tag == 'Figurine' and ship.name ~= '' and isAi(ship.getName()) then
+        if ship.tag == 'Figurine' and ship.name ~= '' and isAi(ship.getName()) and isInPlay(ship) then
             table.insert(ais, ship)
         end
     end -- [end loop for all ships]
@@ -1188,8 +1249,8 @@ function FindNextAi(guid, sort)
     else
         local selffound = false
         for i,ship in ipairs(ais) do
-            if selffound then printToAll("there is next "..ship.getName(),{0,1,0}) return ship end
-            if ship.getGUID()==guid then selffound = true printToAll("found myself",{0,0,1}) else printToAll("not yet "..ship.getName(),{1,0,0}) end
+            if selffound then return ship end
+            if ship.getGUID()==guid then selffound = true end
         end
     end
 end
@@ -1269,6 +1330,7 @@ function Render_Undo(object)
 end
 
 function AiUndoButton(object)
+    aiswerved[object.getGUID()] = nil
     if squadleader[object.getGUID()]~=nil then
         local squad = getAiSquad(ai.getName())
         squadleader[squad] = nil
@@ -1428,7 +1490,7 @@ function findNearestPlayer(guid)
     local angles = {}
 
     for i,ship in ipairs(getAllObjects()) do
-        if ship.tag == 'Figurine' and ship.getGUID() ~= guid and ship.name ~= '' and not isAi(ship.getName()) then
+        if ship.tag == 'Figurine' and ship.getGUID() ~= guid and ship.name ~= '' and not isAi(ship.getName()) and isInPlay(ship) then
             local pos = ship.getPosition()
             -- log("Adding Target: "..ship.getName())
             distances[ship.getGUID()] = realDistance(guid,ship.getGUID())
@@ -1523,7 +1585,9 @@ function getAiHasBarrelRoll(name)
     local type = getAiType(name)
     return type == "TIE" or type == "INT" or type == "ADV"or type == "BOM" or type == "DEF" or type == "PHA"
 end
-
+function isInPlay(object)
+    return math.abs(object.getPosition()[1])<16.5 and math.abs(object.getPosition()[3])<16.5
+end
 function contains (tab, val)
     for index, value in ipairs (tab) do
         if value == val then
