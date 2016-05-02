@@ -31,6 +31,11 @@ function onload()
     aimove = {}
     aiswerved = {}
 
+    -- Auto Setup
+    missionzone = '183284'
+    mission_ps = nil
+    mission_players = nil
+
     aicard = getObjectFromGUID(aicardguid)
     if aicard then
         local flipbutton = {['click_function'] = 'Action_MovePhase', ['label'] = 'AI Move', ['position'] = {0, 0.3, -1.3}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 550, ['font_size'] = 550}
@@ -55,8 +60,10 @@ function PlayerCheck(Color, GUID)
     end
     return PC
 end
-
 function onObjectLeaveScriptingZone(zone, object)
+    if zone.getGUID() == '183284' and object.tag == 'Card' and object.getName():match '^Mission: (.*)' then
+        object.clearButtons()
+    end
     if object.tag == 'Card' and object.getDescription() ~= '' then
         CardData = dialpositions[CardInArray(object.GetGUID())]
         if CardData ~= nil then
@@ -1485,7 +1492,7 @@ end
 
 function findNearestPlayer(guid)
     local ai  = getObjectFromGUID(guid)
-    local inarc = getAiType(ai.getName()) == "DEC"
+    local inarc = getAiType(ai.getName()) ~= "DEC"
     local distances = {}
     local angles = {}
 
@@ -1528,19 +1535,22 @@ function findNearestPlayer(guid)
     local nearest
     local minDist = 999999
 
-    local nearestInArc
-    minDist = 3.7 * 3
-    for guid,dist in pairs(distances) do
+    if inarc then
+        local nearestInArc
+        minDist = 3.7 * 3
+        for guid,dist in pairs(distances) do
 
-        local diff = angles[guid]
-        if diff>math.pi then diff = math.pi*2 - diff end
-        if diff<math.pi/4 and dist < minDist then
-            minDist = dist
-            nearestInArc = guid
-        end -- [end check for nearest]
+            local diff = angles[guid]
+            if diff>math.pi then diff = math.pi*2 - diff end
+            if diff<math.pi/4 and dist < minDist then
+                minDist = dist
+                nearestInArc = guid
+            end -- [end check for nearest]
 
-    end -- [end loop for each distance]
-    if nearestInArc ~= nil then return nearestInArc end
+        end -- [end loop for each distance]
+        if nearestInArc ~= nil then return nearestInArc end
+    end
+    minDist = 999999
     for guid,dist in pairs(distances) do
 
         if dist < minDist then
@@ -1556,7 +1566,7 @@ function findNearestPlayer(guid)
 end
 function findCorners(object)
     local scalar = 0.85
-    if object.name:match '%LGS$' then scalar = 1.63 end
+    if object.getName():match '%LGS$' then scalar = 1.63 end
     local forward = getForwardVector(object.getGUID())
     local f = {forward[1] * scalar, 0, forward[3] * scalar}
     local corners = {}
@@ -1574,8 +1584,8 @@ function realDistance(guid1, guid2)
     local bpos = b.getPosition()
     if a == nil or b == nil then return nil end
     local dist = distance(apos[1],apos[3],bpos[1],bpos[3])
-    if a.name:match '%LGS$' then dist = dist - 2.1 else dist = dist - 1.1 end
-    if b.name:match '%LGS$' then dist = dist - 2.1 else dist = dist - 1.1 end
+    if a.getName():match '%LGS$' then dist = dist - 2.1 else dist = dist - 1.1 end
+    if b.getName():match '%LGS$' then dist = dist - 2.1 else dist = dist - 1.1 end
     return dist
 end
 
@@ -1615,7 +1625,7 @@ function getAiHasBarrelRoll(name)
     return type == "TIE" or type == "INT" or type == "ADV"or type == "BOM" or type == "DEF" or type == "PHA"
 end
 function isInPlay(object)
-    return math.abs(object.getPosition()[1])<16.5 and math.abs(object.getPosition()[3])<16.5
+    return math.abs(object.getPosition()[1])<18 and math.abs(object.getPosition()[3])<18
 end
 function contains (tab, val)
     for index, value in ipairs (tab) do
@@ -1629,4 +1639,60 @@ end
 
 function log(string)
     printToAll("[" .. os.date("%H:%M:%S") .. "] " .. string,{0, 0, 1})
+end
+
+function onObjectEnterScriptingZone(zone, object)
+    if zone.getGUID() == '183284' and object.tag == 'Card' and object.getName():match '^Mission: (.*)' then
+        object.clearButtons()
+        local offset = 0
+        for i,num in ipairs({1,2,3,4,5,6}) do
+            local p = {['click_function'] = 'Action_SetPlayer'..num, ['label'] = num..'P', ['position'] = {-1.5, 0.5, -1.3 + offset}, ['rotation'] =  {0, 0, 0}, ['width'] = 250, ['height'] = 250, ['font_size'] = 200}
+            object.createButton(p)
+            offset = offset + 0.5
+        end
+        offset = 0
+        for i,num in ipairs({2,3,4,5,6,7,8,9,10}) do
+            local p = {['click_function'] = 'Action_SetPS'..num, ['label'] = num..'PS', ['position'] = {1.5, 0.5, -1.3 + offset}, ['rotation'] =  {0, 0, 0}, ['width'] = 300, ['height'] = 200, ['font_size'] = 150}
+            object.createButton(p)
+            offset = offset + 0.3125
+        end
+        local p = {['click_function'] = 'Action_setup', ['label'] = 'Setup', ['position'] = {0, 0.5, -0.2}, ['rotation'] =  {0, 0, 0}, ['width'] = 450, ['height'] = 200, ['font_size'] = 180}
+        object.createButton(p)
+    end
+end
+function Action_SetPlayer1() SetPlayers(1) end
+function Action_SetPlayer2() SetPlayers(2) end
+function Action_SetPlayer3() SetPlayers(3) end
+function Action_SetPlayer4() SetPlayers(4) end
+function Action_SetPlayer5() SetPlayers(5) end
+function Action_SetPlayer6() SetPlayers(6) end
+function SetPlayers(num) mission_players = num printToAll("Setting Number of Players to: "..num,{0,1,1}) end
+function Action_SetPS2() SetPS(2) end
+function Action_SetPS3() SetPS(3) end
+function Action_SetPS4() SetPS(4) end
+function Action_SetPS5() SetPS(5) end
+function Action_SetPS6() SetPS(6) end
+function Action_SetPS7() SetPS(7) end
+function Action_SetPS8() SetPS(8) end
+function Action_SetPS9() SetPS(9) end
+function Action_SetPS10() SetPS(10) end
+function SetPS(num) mission_ps = num printToAll("Setting Average Pilot Skill (PS) of Players to: "..num,{0,1,1}) end
+
+function Action_setup(object)
+    if mission_ps == nil or mission_players == nil then
+        printToAll("Must select Number of players and Average Player Skill", {1,0,0})
+    else
+        local mission = object.getName():match '^Mission: (.*)'
+        local squads = {}
+        if mission == "Local Trouble" then
+            printToAll("Setting up: "..mission, {0,1,0})
+            table.insert(squads, {name="Alpha",arrival=0,vector=3,ai="Attack",type="TIE",count={1,1,0,1,0,1}})
+            table.insert(squads, {name="Beta",arrival=0,vector=4,ai="Attack",type="TIE",count={1,0,1,0,1,0}})
+            table.insert(squads, {name="Gamma",arrival=4,vector="1d6",ai="Attack",type="INT",count={1,0,0,1,0,0}})
+            table.insert(squads, {name="Delta",arrival=7,vector="1d6",ai="Attack",type="TIE",count={0,1,1,0,1,1}})
+        end
+        if mission == "Rescue Rebel Operatives" then
+
+        end
+    end
 end
