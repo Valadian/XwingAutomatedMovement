@@ -1316,6 +1316,9 @@ function AttackSort(a, b)
     local b_ps = tonumber(getSkill(b))
     local b_num = tonumber(getAiNumber(b))
     if a_ps ~= b_ps then
+        if a_ps == nil or b_ps == nil then
+            return a_ps~=nil
+        end
         return a_ps > b_ps
     else
         if isAi(a) ~= isAi(b) then
@@ -1331,6 +1334,9 @@ function MoveSort(a, b)
     local b_ps = tonumber(getSkill(b))
     local b_num = tonumber(getAiNumber(b))
     if a_ps ~= b_ps then
+        if a_ps == nil or b_ps == nil then
+            return a_ps~=nil
+        end
         return a_ps < b_ps
     else
         if isAi(a) ~= isAi(b) then
