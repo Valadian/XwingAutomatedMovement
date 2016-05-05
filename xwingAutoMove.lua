@@ -33,7 +33,7 @@ function onload()
     aitargets = {}
     aistressed = {}
     -- Auto Setup
-    missionzone = '183284'
+    missionzone = 'be00ff'
     mission_ps = nil
     mission_players = nil
     players_up_next = {}
@@ -41,6 +41,8 @@ function onload()
     ai_stress = false
     ai_stress_delay = 0
     aicard = getObjectFromGUID(aicardguid)
+    current = nil
+    currentPhase = nil
     if aicard then
         local prebutton = {['click_function'] = 'Action_PreMovePhase', ['label'] = 'Start Turn', ['position'] = {0, 0.3, -1.5}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 400, ['font_size'] = 550}
         aicard.createButton(prebutton)
@@ -57,15 +59,16 @@ function onload()
 end
 
 function PlayerCheck(Color, GUID)
-    local PC = false
-    if getPlayer(Color) ~= nil then
-        HandPos = getPlayer(Color).getPointerPosition()
-        DialPos = getObjectFromGUID(GUID).getPosition()
-        if distance(HandPos['x'],HandPos['z'],DialPos['x'],DialPos['z']) < 2 then
-            PC = true
-        end
-    end
-    return PC
+    return true
+--    local PC = false
+--    if getPlayer(Color) ~= nil then
+--        HandPos = getPlayer(Color).getPointerPosition()
+--        DialPos = getObjectFromGUID(GUID).getPosition()
+--        if distance(HandPos['x'],HandPos['z'],DialPos['x'],DialPos['z']) < 2 then
+--            PC = true
+--        end
+--    end
+--    return PC
 end
 function onObjectLeaveScriptingZone(zone, object)
     if zone.getGUID() == '183284' and object.tag == 'Card' and object.getName():match '^Mission: (.*)' then
@@ -390,8 +393,9 @@ function notify(guid,move,text)
         text = ''
     end
 
-    obj = getObjectFromGUID(guid)
-    name = obj.getName()
+    local obj = getObjectFromGUID(guid)
+    local name = obj.getName()
+    local name = string.gsub(name,":","|")
     if move == 'q' then
         printToAll(name .. ' executed undo.', {0, 1, 0})
     elseif move == 'set' then
@@ -403,7 +407,11 @@ function notify(guid,move,text)
     elseif move == 'keep' then
         printToAll(name .. ' saved location.', {0, 1, 1})
     else
-        printToAll(name .. ' ' .. text ..' (' .. move .. ').', {1, 0, 0})
+        local color = {1,1,1}
+        if aistressed[guid] then
+            color = {1, 0, 0}
+        end
+        printToAll(name .. ' ' .. text ..' (' .. move .. ').', color)
     end
 end
 
@@ -460,10 +468,35 @@ function check(guid,move)
         printToAll('AI Type For: ' .. ship.getName() .. ' set to ATTACK',{0, 1, 0})
         setpending(guid)
     end
-    if move == 'ai target' then
+    if move == 'ai striketarget' then
         striketarget = guid
         local ship = getObjectFromGUID(guid)
         printToAll('Strike Target Set: ' .. ship.getName(),{0, 0, 1})
+        setpending(guid)
+    end
+    if move:match "ai target (.*)"~=nil then
+        local target = move:match "ai target (.*)"
+        if target == "clear" then
+            aitargets[guid] = nil
+            printToAll('Cleared target for AI',{0, 1, 0})
+        else
+            local players = {}
+            for i,ship in ipairs(getAllObjects()) do
+                local matches = string.match(ship.getName(),target)
+                if not isAi(ship) and isShip(ship) and matches then
+                    table.insert(players, ship)
+                end
+            end
+            if not empty(players) then
+                aitargets[guid] = players[1]
+                printToAll('Set target for AI to: ' .. players[1].getName(),{0, 1, 0})
+            end
+        end
+        if currentphase~=nil then
+            currentGuid = nil
+            if current~= nil then currentGuid = current.getGUID() end
+            UpdateNote(currentphase, currentGuid)
+        end
         setpending(guid)
     end
     if move == "ai pos" then
@@ -839,33 +872,34 @@ end
 
 function auto(guid)
     local ai = getObjectFromGUID(guid)
-    local tgtGuid
+    --local tgtGuid
     local squad = getAiSquad(ai)
-    if aitype[guid] == 'strike' then
-        tgtGuid = striketarget
-        printToAll(ai.getName() .. " is STRIKE AI",{0,1,0})
-    else
-        tgtGuid = findNearestPlayer(guid)
-    end
-    if tgtGuid == nil then
+--    if aitype[guid] == 'strike' then
+--        tgtGuid = striketarget
+--        printToAll(ai.getName() .. " is STRIKE AI",{0,1,0})
+--    else
+--        tgtGuid = findNearestPlayer(guid)
+--    end
+    local tgt = findAiTarget(guid)
+    if tgt == nil then
         printToAll('Error: AI ' .. ai.getName() .. ' has no target',{0, 0, 1})
         setpending(guid)
     else
-        local tgt = getObjectFromGUID(tgtGuid)
-        aitargets[guid] = tgt
+        -- local tgt = getObjectFromGUID(tgtGuid)
+        -- aitargets[guid] = tgt
         -- printToAll("--------------------------------------------------",{0,1,0})
         -- printToAll(ai.getName().." declares target as [00FF00][u]" .. tgt.getName().."[/u][-]",{0,1,0})
         local aiPos = ai.getPosition()
         local tgtPos = tgt.getPosition()
         local aiForward = getForwardVector(guid)
-        local tgtForward = getForwardVector(tgtGuid)
+        local tgtForward = getForwardVector(tgt.getGUID())
         local offset = {tgtPos[1] - aiPos[1],0,tgtPos[3] - aiPos[3]}
         local angle = math.atan2(offset[3], offset[1]) - math.atan2(aiForward[3], aiForward[1])
         if angle < 0 then
             angle = angle + 2 * math.pi
         end
         local fleeing = dot(offset,tgtForward)>0
-        local move = getMove(getAiType(ai),angle,realDistance(guid,tgtGuid),fleeing)
+        local move = getMove(getAiType(ai),angle,realDistance(guid,tgt.getGUID()),fleeing)
         if squad ~= nil then
             -- printToAll("Setting move for squad [".. squad.."] ".. move,{1,0,0})
             squadleader[squad] = guid
@@ -876,6 +910,26 @@ function auto(guid)
         executeMove(ai, move)
         Render_SwerveLeft(ai,move)
         Render_SwerveRight(ai,move)
+    end
+end
+function findAiTarget(guid)
+    if aitargets[guid]~=nil then
+        return aitargets[guid]
+    end
+    local ai = getObjectFromGUID(guid)
+    local tgtGuid
+    if aitype[guid] == 'strike' then
+        printToAll(ai.getName() .. " is STRIKE AI",{0,1,0})
+        tgtGuid = striketarget
+    else
+        tgtGuid = findNearestPlayer(guid)
+    end
+    if tgtGuid ~= nil then
+        local tgt = getObjectFromGUID(tgtGuid)
+        aitargets[guid] = tgt
+        return tgt
+    else
+        return nil
     end
 end
 
@@ -1227,6 +1281,7 @@ function Action_MovePhase()
     -- printToAll("*****************************",{0,1,1})
     -- printToAll("STARTING ACTIVATION PHASE",{0,1,1})
     -- printToAll("*****************************",{0,1,1})
+    currentphase = MoveSort
     squadleader = {}
     squadmove = {}
     squadposition = {}
@@ -1235,7 +1290,6 @@ function Action_MovePhase()
     aiswerved = {}
     aitargets = {}
     aistressed = {}
-    UpdateNote(MoveSort, nil)
     -- ListAis(MoveSort)
     for i,ship in ipairs(getAllObjects()) do
         if isAi(ship) then
@@ -1246,10 +1300,12 @@ function Action_MovePhase()
     end -- [end loop for all ships]
 
     local first = FindNextAi(nil, MoveSort)
-
+    current = first
     if first ~=nil then
+        findAiTarget(first.getGUID())
         State_AIMove(first)
     end
+    UpdateNote(MoveSort, nil)
 end
 function Action_ClearAi()
     for i,ship in ipairs(getAllObjects()) do
@@ -1262,6 +1318,7 @@ function Action_AttackPhase()
     -- printToAll("**************************",{0,1,1})
     -- printToAll("STARTING COMBAT PHASE",{0,1,1})
     -- printToAll("**************************",{0,1,1})
+    currentphase = AttackSort
     UpdateNote(AttackSort, nil)
     -- ListAis(AttackSort)
     for i,ship in ipairs(getAllObjects()) do
@@ -1271,7 +1328,7 @@ function Action_AttackPhase()
         end
     end -- [end loop for all ships]
     local first = FindNextAi(nil, AttackSort)
-
+    current = first
     if first ~=nil then
         Render_Ruler(first)
         Render_AttackButton(first)
@@ -1285,7 +1342,7 @@ end
 function Action_AiAttack(object)
     object.clearButtons()
     local next = FindNextAi(object.getGUID(),AttackSort)
-
+    current = next
     if next ~=nil then
         Render_Ruler(next)
         Render_AttackButton(next)
@@ -1307,7 +1364,8 @@ function UpdateNote(sort, next,complete)
     local first = true
     for i,ship in ipairs(ais) do
         local arrow = ''
-        if next == nil and not complete and  first or next == ship.getGUID() then
+        local current = next == nil and not complete and  first or next == ship.getGUID()
+        if current then
             arrow = "[0080FF][b]Current ---->[/b][-] "
             first = false
         end
@@ -1436,10 +1494,10 @@ function State_AIMove(object)
     -- Set MOVE button
     local label = 'Move'
     if not isAi(object) then label = 'Next' end
-    local movebutton = {['click_function'] = 'Action_AiMove', ['label'] = label, ['position'] = {0.3, 0.3, -0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 750, ['height'] = 550, ['font_size'] = 550}
+    local movebutton = {['click_function'] = 'Action_AiMove', ['label'] = label, ['position'] = {0, 0.3, -0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 750, ['height'] = 550, ['font_size'] = 550}
     object.createButton(movebutton)
     if isAi(object) and getAiSquad(object)~=nil then
-        local squadbutton = {['click_function'] = 'AiSquadButton', ['label'] = 'Squad', ['position'] = {0.3, 0.3, 0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 750, ['height'] = 550, ['font_size'] = 550}
+        local squadbutton = {['click_function'] = 'AiSquadButton', ['label'] = 'Squad', ['position'] = {0, 0.3, 0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 750, ['height'] = 550, ['font_size'] = 550}
         object.createButton(squadbutton)
     end
     if getAiType(object) == "PHA" then
@@ -1461,8 +1519,9 @@ function GoToNextMove(object)
         object.clearButtons()
     end
     local next = FindNextAi(object.getGUID(),MoveSort)
-
+    current = next
     if next ~=nil then
+        findAiTarget(next.getGUID())
         State_AIMove(next)
         UpdateNote(MoveSort, next.getGUID())
     else
@@ -1632,11 +1691,11 @@ end
 
 
 function Action_Focus(object)
-    take(focus, object.getGUID(),-0.5,1,-0.5)
+    take(focus, object.getGUID(),-0.37,1,-0.37)
     notify(object.getGUID(),'action','takes a focus token')
 end
 function Action_Evade(object)
-    take(evade, object.getGUID(),-0.5,1,0.5)
+    take(evade, object.getGUID(),-0.37,1,0.37)
     notify(object.getGUID(),'action','takes an evade token')
 end
 
@@ -1771,7 +1830,7 @@ function getAiType(ai)
         -- printToAll("Error: "..ai.getName() .. " does not define valid type in format '[AI:{type}:{PS}] Name'",{1,0,0})
         -- printToAll("Error: Implemented Types are: TIE, INT, ADV, BOM, DEF, PHA, DEC, SHU",{1,0,0})
         return "INT"
-    endc
+    end
 end
 function getSkill(ai)
     return ai.getName():match '^%[%a*:?%u*:?(%d*)].*'
@@ -1816,7 +1875,7 @@ function log(string)
 end
 
 function onObjectEnterScriptingZone(zone, object)
-    if zone.getGUID() == '183284' and object.tag == 'Card' and object.getName():match '^Mission: (.*)' then
+    if zone.getGUID() == missionzone and object.tag == 'Card' and object.getName():match '^Mission: (.*)' then
         object.clearButtons()
         local offset = 0
         for i,num in ipairs({1,2,3,4,5,6}) do
