@@ -3,61 +3,101 @@
 -- X-Wing Auto Dial Integration - Flolania, March 2016
 -- X-Wing AI Auto movement - Valadian, April 2016
 
+--Auto Movement
+local undolist = {}
+local undopos = {}
+local undorot = {}
+local namelist1 = {}
+local locktimer = {}
+
+--Auto Dials
+--dial information
+local dialpositions = {}
+
+-- Auto Actions
+local focus = 'beca0f'
+local evade = '4a352e'
+local stress = 'a25e12'
+
+-- AI
+local aitype = {}
+local striketarget
+local aicardguid = '2d84be'
+local squadleader = {}
+local squadmove = {}
+local squadposition = {}
+local squadrotation = {}
+local aimove = {}
+local aiswerved = {}
+local aitargets = {}
+local aistressed = {}
+local aidecloaked = {}
+-- Auto Setup
+local missionzone = 'be00ff'
+local mission_ps
+local mission_players
+local players_up_next = {}
+local players_up_next_delay = 0
+local ai_stress = false
+local ai_stress_delay = 0
+local current
+local currentphase
+
 function onload()
-    --Auto Movement
-    undolist = {}
-    undopos = {}
-    undorot = {}
-    namelist1 = {}
-    locktimer = {}
-
-    --Auto Dials
-    --dial information
-    dialpositions = {}
-
-    -- Auto Actions
-    focus = 'beca0f'
-    evade = '4a352e'
-    stress = 'a25e12'
-
-    -- AI
-    aitype = {}
-    striketarget = nil
-    aicardguid = '2d84be'
-    squadleader = {}
-    squadmove = {}
-    squadposition = {}
-    squadrotation = {}
-    aimove = {}
-    aiswerved = {}
-    aitargets = {}
-    aistressed = {}
-    -- Auto Setup
-    missionzone = 'be00ff'
-    mission_ps = nil
-    mission_players = nil
-    players_up_next = {}
-    players_up_next_delay = 0
-    ai_stress = false
-    ai_stress_delay = 0
-    aicard = getObjectFromGUID(aicardguid)
-    current = nil
-    currentPhase = nil
+--    --Auto Movement
+--    undolist = {}
+--    undopos = {}
+--    undorot = {}
+--    namelist1 = {}
+--    locktimer = {}
+--
+--    --Auto Dials
+--    --dial information
+--    dialpositions = {}
+--
+--    -- Auto Actions
+--    focus = 'beca0f'
+--    evade = '4a352e'
+--    stress = 'a25e12'
+--
+--    -- AI
+--    aitype = {}
+--    striketarget = nil
+--    aicardguid = '2d84be'
+--    squadleader = {}
+--    squadmove = {}
+--    squadposition = {}
+--    squadrotation = {}
+--    aimove = {}
+--    aiswerved = {}
+--    aitargets = {}
+--    aistressed = {}
+--    aidecloaked = {}
+--    -- Auto Setup
+--    missionzone = 'be00ff'
+--    mission_ps = nil
+--    mission_players = nil
+--    players_up_next = {}
+--    players_up_next_delay = 0
+--    ai_stress = false
+--    ai_stress_delay = 0
+--    current = nil
+--    currentPhase = nil
+    local aicard = getObjectFromGUID(aicardguid)
     if aicard then
-        local prebutton = {['click_function'] = 'Action_PreMovePhase', ['label'] = 'Start Turn', ['position'] = {0, 0.3, -1.5}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 400, ['font_size'] = 550}
+        local prebutton = {['click_function'] = 'Action_PreMovePhase', ['label'] = 'Start Turn', ['position'] = {0, 0.3, -1.5}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 400, ['font_size'] = 250}
         aicard.createButton(prebutton)
 
-        local flipbutton = {['click_function'] = 'Action_MovePhase', ['label'] = 'Activation', ['position'] = {0, 0.3, -0.5}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 400, ['font_size'] = 550}
+        local flipbutton = {['click_function'] = 'Action_MovePhase', ['label'] = 'Activation', ['position'] = {0, 0.3, -0.5}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 400, ['font_size'] = 250}
         aicard.createButton(flipbutton)
 
-        local attackbutton = {['click_function'] = 'Action_AttackPhase', ['label'] = 'Combat', ['position'] = {0, 0.3, 0.5}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 400, ['font_size'] = 550}
+        local attackbutton = {['click_function'] = 'Action_AttackPhase', ['label'] = 'Combat', ['position'] = {0, 0.3, 0.5}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 400, ['font_size'] = 250}
         aicard.createButton(attackbutton)
 
-        local clearbutton = {['click_function'] = 'Action_ClearAi', ['label'] = 'Clear AI', ['position'] = {0, 0.3, 1.5}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 400, ['font_size'] = 550}
+        local clearbutton = {['click_function'] = 'Action_EndPhase', ['label'] = 'End', ['position'] = {0, 0.3, 1.5}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 400, ['font_size'] = 250}
         aicard.createButton(clearbutton)
     end
 end
-
 function PlayerCheck(Color, GUID)
     return true
 --    local PC = false
@@ -71,22 +111,22 @@ function PlayerCheck(Color, GUID)
 --    return PC
 end
 function onObjectLeaveScriptingZone(zone, object)
-    if zone.getGUID() == '183284' and object.tag == 'Card' and object.getName():match '^Mission: (.*)' then
+    if zone.getGUID() == missionzone and object.tag == 'Card' and object.getName():match '^Mission: (.*)' then
         object.clearButtons()
     end
     if object.tag == 'Card' and object.getDescription() ~= '' then
-        CardData = dialpositions[CardInArray(object.GetGUID())]
+        local CardData = dialpositions[CardInArray(object.GetGUID())]
         if CardData ~= nil then
-            obj = getObjectFromGUID(CardData["ShipGUID"])
+            local obj = getObjectFromGUID(CardData["ShipGUID"])
             if obj.getVar('HasDial') == true then
                 printToColor(CardData["ShipName"] .. ' already has a dial.', object.held_by_color, {0, 0, 1})
             else
                 obj.setVar('HasDial', true)
                 CardData["Color"] = object.held_by_color
 
-                local flipbutton = {['click_function'] = 'CardFlipButton', ['label'] = 'Flip', ['position'] = {0, -1, 1}, ['rotation'] =  {0, 0, 180}, ['width'] = 750, ['height'] = 550, ['font_size'] = 550}
+                local flipbutton = {['click_function'] = 'CardFlipButton', ['label'] = 'Flip', ['position'] = {0, -1, 1}, ['rotation'] =  {0, 0, 180}, ['width'] = 750, ['height'] = 550, ['font_size'] = 250}
                 object.createButton(flipbutton)
-                local deletebutton = {['click_function'] = 'CardDeleteButton', ['label'] = 'Delete', ['position'] = {0, -1, -1}, ['rotation'] =  {0, 0, 180}, ['width'] = 750, ['height'] = 550, ['font_size'] = 550}
+                local deletebutton = {['click_function'] = 'CardDeleteButton', ['label'] = 'Delete', ['position'] = {0, -1, -1}, ['rotation'] =  {0, 0, 180}, ['width'] = 750, ['height'] = 550, ['font_size'] = 250}
                 object.createButton(deletebutton)
 
                 object.setVar('Lock',true)
@@ -98,7 +138,7 @@ function onObjectLeaveScriptingZone(zone, object)
 end
 
 function CardInArray(GUID)
-    CIAPos = nil
+    local CIAPos
     for i, card in ipairs(dialpositions) do
         if GUID == card["GUID"] then
             CIAPos = i
@@ -108,43 +148,43 @@ function CardInArray(GUID)
 end
 
 function CardFlipButton(object)
-    CardData = dialpositions[CardInArray(object.GetGUID())]
+    local CardData = dialpositions[CardInArray(object.GetGUID())]
     if PlayerCheck(CardData["Color"],CardData["GUID"]) == true then
-        rot = getObjectFromGUID(CardData["ShipGUID"]).getRotation()
+        local rot = getObjectFromGUID(CardData["ShipGUID"]).getRotation()
         object.setRotation({0,rot[2],0})
         object.clearButtons()
-        local movebutton = {['click_function'] = 'CardMoveButton', ['label'] = 'Move', ['position'] = {0, 1, '.9'}, ['rotation'] =  {0, 0, 0}, ['width'] = 750, ['height'] = 550, ['font_size'] = 550}
+        local movebutton = {['click_function'] = 'CardMoveButton', ['label'] = 'Move', ['position'] = {0, 1, '.9'}, ['rotation'] =  {0, 0, 0}, ['width'] = 750, ['height'] = 550, ['font_size'] = 250}
         object.createButton(movebutton)
     end
 end
 
 
 function CardMoveButton(object)
-    CardData = dialpositions[CardInArray(object.GetGUID())]
+    local CardData = dialpositions[CardInArray(object.GetGUID())]
     if PlayerCheck(CardData["Color"],CardData["GUID"]) == true then
         check(CardData["ShipGUID"],object.getDescription())
         object.clearButtons()
 
-        local deletebutton = {['click_function'] = 'CardDeleteButton', ['label'] = 'Delete', ['position'] = {'-.35', 1, 1}, ['rotation'] =  {0, 0, 0}, ['width'] = 750, ['height'] = 650, ['font_size'] = 550}
+        local deletebutton = {['click_function'] = 'CardDeleteButton', ['label'] = 'Delete', ['position'] = {'-.35', 1, 1}, ['rotation'] =  {0, 0, 0}, ['width'] = 750, ['height'] = 650, ['font_size'] = 250}
         object.createButton(deletebutton)
 
-        local undobutton = {['click_function'] = 'CardUndoButton', ['label'] = 'q', ['position'] = {'-.9', 1, -1}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 550}
+        local undobutton = {['click_function'] = 'CardUndoButton', ['label'] = 'q', ['position'] = {'-.9', 1, -1}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 250}
         object.createButton(undobutton)
 
-        local focusbutton = {['click_function'] = 'CardFocusButton', ['label'] = 'F', ['position'] = {'.9', 1, -1}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 550}
+        local focusbutton = {['click_function'] = 'CardFocusButton', ['label'] = 'F', ['position'] = {'.9', 1, -1}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 250}
         object.createButton(focusbutton)
 
-        local stressbutton = {['click_function'] = 'CardStressButton', ['label'] = 'S', ['position'] = {'.9', 1, 0}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 550}
+        local stressbutton = {['click_function'] = 'CardStressButton', ['label'] = 'S', ['position'] = {'.9', 1, 0}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 250}
         object.createButton(stressbutton)
 
-        local evadebutton = {['click_function'] = 'CardEvadeButton', ['label'] = 'E', ['position'] = {'.9', 1, 1}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 550}
+        local evadebutton = {['click_function'] = 'CardEvadeButton', ['label'] = 'E', ['position'] = {'.9', 1, 1}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 250}
         object.createButton(evadebutton)
 
     end
 end
 
 function CardFocusButton(object)
-    CardData = dialpositions[CardInArray(object.GetGUID())]
+    local CardData = dialpositions[CardInArray(object.GetGUID())]
     if PlayerCheck(CardData["Color"],CardData["GUID"]) == true then
         take(focus, CardData["ShipGUID"],-0.3,1,-0.3)
         notify(CardData["ShipGUID"],'action','takes a focus token')
@@ -152,7 +192,7 @@ function CardFocusButton(object)
 end
 
 function CardStressButton(object)
-    CardData = dialpositions[CardInArray(object.GetGUID())]
+    local CardData = dialpositions[CardInArray(object.GetGUID())]
     if PlayerCheck(CardData["Color"],CardData["GUID"]) == true then
         take(stress, CardData["ShipGUID"],0.3,1,0.3)
         notify(CardData["ShipGUID"],'action','takes stress')
@@ -160,7 +200,7 @@ function CardStressButton(object)
 end
 
 function CardEvadeButton(object)
-    CardData = dialpositions[CardInArray(object.GetGUID())]
+    local CardData = dialpositions[CardInArray(object.GetGUID())]
     if PlayerCheck(CardData["Color"],CardData["GUID"]) == true then
         take(evade, CardData["ShipGUID"],-0.5,1,0.5)
         notify(CardData["ShipGUID"],'action','takes an evade token')
@@ -168,7 +208,7 @@ function CardEvadeButton(object)
 end
 
 function CardUndoButton(object)
-    CardData = dialpositions[CardInArray(object.GetGUID())]
+    local CardData = dialpositions[CardInArray(object.GetGUID())]
     if PlayerCheck(CardData["Color"],CardData["GUID"]) == true then
         check(CardData["ShipGUID"],'undo')
         object.removeButton(1)
@@ -176,7 +216,7 @@ function CardUndoButton(object)
 end
 
 function CardDeleteButton(object)
-    CardData = dialpositions[CardInArray(object.GetGUID())]
+    local CardData = dialpositions[CardInArray(object.GetGUID())]
     if PlayerCheck(CardData["Color"],CardData["GUID"]) == true then
         getObjectFromGUID(CardData["ShipGUID"]).setVar('HasDial',false)
         object.Unlock()
@@ -188,7 +228,7 @@ function CardDeleteButton(object)
 end
 
 function resetdials(guid,notice)
-    obj = getObjectFromGUID(guid)
+    local obj = getObjectFromGUID(guid)
     local index = {}
     for i, card in ipairs(dialpositions) do
         if guid == card["ShipGUID"] then
@@ -207,21 +247,21 @@ end
 
 function checkdials(guid)
     resetdials(guid,0)
-    obj = getObjectFromGUID(guid)
-    count = 0
-    display = false
-    error = false
-    deckerror = false
+    local obj = getObjectFromGUID(guid)
+    local count = 0
+    local display = false
+    local error = false
+    local deckerror = false
     for i,card in ipairs(getAllObjects()) do
-        cardpos = card.getPosition()
-        objpos = obj.getPosition()
+        local cardpos = card.getPosition()
+        local objpos = obj.getPosition()
         if distance(cardpos[1],cardpos[3],objpos[1],objpos[3]) < 5.5 then
             if cardpos[3] >= 18 or cardpos[3] <= -18 then
                 if card.tag == 'Card' and card.getDescription() ~= '' then
-                    CardData = dialpositions[CardInArray(card.getGUID())]
+                    local CardData = dialpositions[CardInArray(card.getGUID())]
                     if CardData == nil then
                         count = count + 1
-                        cardtable = {}
+                        local cardtable = {}
                         cardtable["GUID"] = card.getGUID()
                         cardtable["Position"] = card.getPosition()
                         cardtable["Rotation"] = card.getRotation()
@@ -268,15 +308,15 @@ function distance(x,y,a,b)
 end
 
 function SpawnDialGuide(guid)
-    shipobject = getObjectFromGUID(guid)
-    world = shipobject.getPosition()
-    direction = shipobject.getRotation()
-    obj_parameters = {}
+    local shipobject = getObjectFromGUID(guid)
+    local world = shipobject.getPosition()
+    local direction = shipobject.getRotation()
+    local obj_parameters = {}
     obj_parameters.type = 'Custom_Model'
     obj_parameters.position = {world[1], world[2]+0.15, world[3]}
     obj_parameters.rotation = { 0, direction[2], 0 }
-    DialGuide = spawnObject(obj_parameters)
-    custom = {}
+    local DialGuide = spawnObject(obj_parameters)
+    local custom = {}
     custom.mesh = 'http://pastebin.com/raw/qPcTJZyP'
     custom.collider = 'http://pastebin.com/raw.php?i=UK3Urmw1'
 
@@ -297,9 +337,9 @@ end
 function update ()
     for i,ship in ipairs(getAllObjects()) do
         if ship.tag == 'Figurine' and ship.name ~= '' then
-            shipguid = ship.getGUID()
-            shipname = ship.getName()
-            shipdesc = ship.getDescription()
+            local shipguid = ship.getGUID()
+            local shipdesc = ship.getDescription()
+            local shipname = ship.getName()
             checkname(shipguid,shipdesc,shipname)
             check(shipguid,shipdesc)
         end
@@ -322,9 +362,9 @@ function round(num, idp)
 end
 
 function take(parent, guid, xoff, yoff, zoff)
-    obj = getObjectFromGUID(guid)
-    objp = getObjectFromGUID(parent)
-    world = obj.getPosition()
+    local obj = getObjectFromGUID(guid)
+    local objp = getObjectFromGUID(parent)
+    local world = obj.getPosition()
     local offset = RotateVector({xoff, yoff, zoff}, obj.getRotation()[2])
     local params = {}
     params.position = {world[1]+offset[1], world[2]+offset[2], world[3]+offset[3]}
@@ -332,6 +372,7 @@ function take(parent, guid, xoff, yoff, zoff)
 end
 
 function undo(guid)
+    local obj
     if undolist[guid] ~= nil then
         obj = getObjectFromGUID(guid)
         obj.setPosition(undopos[guid])
@@ -345,17 +386,17 @@ function undo(guid)
 end
 
 function storeundo(guid)
-    obj = getObjectFromGUID(guid)
-    direction = obj.getRotation()
-    world = obj.getPosition()
+    local obj = getObjectFromGUID(guid)
+    local direction = obj.getRotation()
+    local world = obj.getPosition()
     undolist[guid] = guid
     undopos[guid] = world
     undorot[guid] = direction
 end
 
 function registername(guid)
-    obj = getObjectFromGUID(guid)
-    name = obj.getName()
+    local obj = getObjectFromGUID(guid)
+    local name = obj.getName()
     namelist1[guid] = name
     setlock(guid)
 end
@@ -370,20 +411,20 @@ end
 
 function fixname(guid)
     if namelist1[guid] ~= nil then
-        obj = getObjectFromGUID(guid)
+        local obj = getObjectFromGUID(guid)
         obj.setName(namelist1[guid])
     end
 end
 
 function setpending(guid)
     fixname(guid)
-    obj = getObjectFromGUID(guid)
+    local obj = getObjectFromGUID(guid)
     obj.setDescription('Pending')
 end
 
 function setlock(guid)
     fixname(guid)
-    obj = getObjectFromGUID(guid)
+    local obj = getObjectFromGUID(guid)
     obj.setDescription('Locking')
 end
 
@@ -417,6 +458,8 @@ end
 
 
 function check(guid,move)
+    local ship = getObjectFromGUID(guid)
+    local shipname = ship.getName()
     -- Checking for Lock
     if move == 'Locking' then
         if locktimer[guid] ~= nil or locktimer[guid] == 0 then
@@ -426,7 +469,7 @@ function check(guid,move)
                 locktimer[guid] = 100
             else
                 locktimer[guid] = 0
-                obj = getObjectFromGUID(guid)
+                local obj = getObjectFromGUID(guid)
                 obj.lock()
                 setpending(guid)
             end
@@ -493,7 +536,7 @@ function check(guid,move)
             end
         end
         if currentphase~=nil then
-            currentGuid = nil
+            local currentGuid
             if current~= nil then currentGuid = current.getGUID() end
             UpdateNote(currentphase, currentGuid)
         end
@@ -738,8 +781,8 @@ end
 
 function checkpos(guid)
     setpending(guid)
-    obj = getObjectFromGUID(guid)
-    world = obj.getPosition()
+    local obj = getObjectFromGUID(guid)
+    local world = obj.getPosition()
     for i, v in ipairs(world) do
         print(v)
     end
@@ -747,8 +790,8 @@ end
 
 function checkrot(guid)
     setpending(guid)
-    obj = getObjectFromGUID(guid)
-    world = obj.getRotation()
+    local obj = getObjectFromGUID(guid)
+    local world = obj.getRotation()
     for i, v in ipairs(world) do
         print(v)
     end
@@ -756,18 +799,18 @@ end
 
 function ruler(guid)
 
-    shipobject = getObjectFromGUID(guid)
-    shipname = shipobject.getName()
-    direction = shipobject.getRotation()
-    world = shipobject.getPosition()
-    scale = shipobject.getScale()
+    local shipobject = getObjectFromGUID(guid)
+    local shipname = shipobject.getName()
+    local direction = shipobject.getRotation()
+    local world = shipobject.getPosition()
+    local scale = shipobject.getScale()
 
-    obj_parameters = {}
+    local obj_parameters = {}
     obj_parameters.type = 'Custom_Model'
     obj_parameters.position = {world[1], world[2]+0.28, world[3]}
     obj_parameters.rotation = { 0, direction[2] +180, 0 }
-    newruler = spawnObject(obj_parameters)
-    custom = {}
+    local newruler = spawnObject(obj_parameters)
+    local custom = {}
     if shipname:match '%LGS$' then
         custom.mesh = 'http://pastebin.com/raw/3AU6BBjZ'
         custom.collider = 'https://paste.ee/r/JavTd'
@@ -790,17 +833,17 @@ end
 
 function straight(guid,forwardDistance,bsfd)
     storeundo(guid)
-    obj = getObjectFromGUID(guid)
-    shipname = obj.getName()
+    local obj = getObjectFromGUID(guid)
+    local shipname = obj.getName()
     if shipname:match '%LGS$' then
         forwardDistance = forwardDistance + bsfd
     end
-    direction = obj.getRotation()
-    world = obj.getPosition()
-    rotval = round(direction[2])
-    radrotval = math.rad(rotval)
-    xDistance = math.sin(radrotval) * forwardDistance * -1
-    zDistance = math.cos(radrotval) * forwardDistance * -1
+    local direction = obj.getRotation()
+    local world = obj.getPosition()
+    local rotval = round(direction[2])
+    local radrotval = math.rad(rotval)
+    local xDistance = math.sin(radrotval) * forwardDistance * -1
+    local zDistance = math.cos(radrotval) * forwardDistance * -1
     setlock(guid)
     obj.setPosition( {world[1]+xDistance, world[2]+2, world[3]+zDistance} )
     obj.Rotate({0, 0, 0})
@@ -810,17 +853,17 @@ end
 
 function straightk(guid,forwardDistance,bsfd)
     storeundo(guid)
-    obj = getObjectFromGUID(guid)
-    shipname = obj.getName()
+    local obj = getObjectFromGUID(guid)
+    local shipname = obj.getName()
     if shipname:match '%LGS$' then
         forwardDistance = forwardDistance + bsfd
     end
-    direction = obj.getRotation()
-    world = obj.getPosition()
-    rotval = round(direction[2])
-    radrotval = math.rad(rotval)
-    xDistance = math.sin(radrotval) * forwardDistance * -1
-    zDistance = math.cos(radrotval) * forwardDistance * -1
+    local direction = obj.getRotation()
+    local world = obj.getPosition()
+    local rotval = round(direction[2])
+    local radrotval = math.rad(rotval)
+    local xDistance = math.sin(radrotval) * forwardDistance * -1
+    local zDistance = math.cos(radrotval) * forwardDistance * -1
     setlock(guid)
     obj.setPosition( {world[1]+xDistance, world[2]+2, world[3]+zDistance} )
     obj.Rotate({0, 180, 0})
@@ -828,21 +871,21 @@ end
 
 function right(guid,forwardDistance,sidewaysDistance,rotate,bsfd,bssd)
     storeundo(guid)
-    obj = getObjectFromGUID(guid)
-    shipname = obj.getName()
+    local obj = getObjectFromGUID(guid)
+    local shipname = obj.getName()
     if shipname:match '%LGS$' then
         forwardDistance = forwardDistance + bsfd
         sidewaysDistance = sidewaysDistance + bssd
     end
-    direction = obj.getRotation()
-    world = obj.getPosition()
-    rotval = round(direction[2])
-    radrotval = math.rad(rotval)
-    xDistance = math.sin(radrotval) * forwardDistance * -1
-    zDistance = math.cos(radrotval) * forwardDistance * -1
-    radrotval = radrotval + math.rad(90)
-    xDistance = xDistance + (math.sin(radrotval) * sidewaysDistance * -1)
-    zDistance = zDistance + (math.cos(radrotval) * sidewaysDistance * -1)
+    local direction = obj.getRotation()
+    local world = obj.getPosition()
+    local rotval = round(direction[2])
+    local radrotval = math.rad(rotval)
+    local xDistance = math.sin(radrotval) * forwardDistance * -1
+    local zDistance = math.cos(radrotval) * forwardDistance * -1
+    local radrotval = radrotval + math.rad(90)
+    local xDistance = xDistance + (math.sin(radrotval) * sidewaysDistance * -1)
+    local zDistance = zDistance + (math.cos(radrotval) * sidewaysDistance * -1)
     setlock(guid)
     obj.setPosition( {world[1]+xDistance, world[2]+2, world[3]+zDistance} )
     obj.Rotate({0, rotate, 0})
@@ -850,18 +893,18 @@ end
 
 function left(guid,forwardDistance,sidewaysDistance,rotate,bsfd,bssd)
     storeundo(guid)
-    obj = getObjectFromGUID(guid)
-    shipname = obj.getName()
+    local obj = getObjectFromGUID(guid)
+    local shipname = obj.getName()
     if shipname:match '%LGS$' then
         forwardDistance = forwardDistance + bsfd
         sidewaysDistance = sidewaysDistance + bssd
     end
-    direction = obj.getRotation()
-    world = obj.getPosition()
-    rotval = round(direction[2])
-    radrotval = math.rad(rotval)
-    xDistance = math.sin(radrotval) * forwardDistance * -1
-    zDistance = math.cos(radrotval) * forwardDistance * -1
+    local direction = obj.getRotation()
+    local world = obj.getPosition()
+    local rotval = round(direction[2])
+    local radrotval = math.rad(rotval)
+    local xDistance = math.sin(radrotval) * forwardDistance * -1
+    local zDistance = math.cos(radrotval) * forwardDistance * -1
     radrotval = radrotval - math.rad(90)
     xDistance = xDistance + (math.sin(radrotval) * sidewaysDistance * -1)
     zDistance = zDistance + (math.cos(radrotval) * sidewaysDistance * -1)
@@ -1153,14 +1196,14 @@ function getMove(type, direction,range,fleeing)
         farMoves[8] = {'s4','br3','br3','br3','br2','tr3' }
     end
     if type == "SHU" then
-        closeMoves[1] = {'*','*','*','s1','br1','bl1'}
-        closeMoves[2] = {'*','s1','bl1','bl1','bl1','tl2*'}
-        closeMoves[3] = {'*','tl2*','tl2*','tl2*','bl1','bl2'}
-        closeMoves[4] = {'*','tl2*','tl2*','tl2*','bl2','bl3*'}
-        closeMoves[5] = {'*','*','tr2*','tl2*','br3*','bl3*'}
-        closeMoves[6] = {'*','tr2*','tr2*','tr2*','br2','br3*'}
-        closeMoves[7] = {'*','tr2*','tr2*','tr2*','br1','br2'}
-        closeMoves[8] = {'*','s1','br1','br1','br1','tr2*' }
+        closeMoves[1] = {'s0*','s0*','s0*','s1','br1','bl1'}
+        closeMoves[2] = {'s0*','s1','bl1','bl1','bl1','tl2*'}
+        closeMoves[3] = {'s0*','tl2*','tl2*','tl2*','bl1','bl2'}
+        closeMoves[4] = {'s0*','tl2*','tl2*','tl2*','bl2','bl3*'}
+        closeMoves[5] = {'s0*','*','tr2*','tl2*','br3*','bl3*'}
+        closeMoves[6] = {'s0*','tr2*','tr2*','tr2*','br2','br3*'}
+        closeMoves[7] = {'s0*','tr2*','tr2*','tr2*','br1','br2'}
+        closeMoves[8] = {'s0*','s1','br1','br1','br1','tr2*' }
 
         farMoves[1] = {'s3','s3','s3','s2','s2','s1'}
         farMoves[2] = {'s2','bl3*','bl2','bl2','bl2','tl2*'}
@@ -1184,7 +1227,7 @@ end
 function getSwerve(type, move)
     local swerves = {}
     if type == "SHU" then
-        swerves["*"] = {nil,nil}
+        swerves["s0*"] = {nil,nil}
     end
     -- 1
     if type == "TIE" or type == "INT" or type == "PHA" then
@@ -1292,8 +1335,11 @@ function Action_MovePhase()
     aistressed = {}
     -- ListAis(MoveSort)
     for i,ship in ipairs(getAllObjects()) do
-        if isAi(ship) then
+        if isShip(ship) then
             ship.clearButtons()
+            if getAiType(ship)=="PHA" then
+                Render_AiDecloak(ship)
+            end
             -- Set MOVE button
             -- State_AIMove(ship)
         end
@@ -1322,7 +1368,7 @@ function Action_AttackPhase()
     UpdateNote(AttackSort, nil)
     -- ListAis(AttackSort)
     for i,ship in ipairs(getAllObjects()) do
-        if isAi(ship) then
+        if isShip(ship) then
             ship.clearButtons()
             -- Render_Ruler(ship)
         end
@@ -1334,9 +1380,13 @@ function Action_AttackPhase()
         Render_AttackButton(first)
     end
 end
+
+
+function Action_EndPhase()
+end
 function Render_AttackButton(object)
 
-    local attackbutton = {['click_function'] = 'Action_AiAttack', ['label'] = 'Attack', ['position'] = {0, 0.3, -0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 750, ['height'] = 550, ['font_size'] = 550}
+    local attackbutton = {['click_function'] = 'Action_AiAttack', ['label'] = 'Attack', ['position'] = {0, 0.3, -0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 750, ['height'] = 550, ['font_size'] = 250}
     object.createButton(attackbutton)
 end
 function Action_AiAttack(object)
@@ -1352,7 +1402,16 @@ function Action_AiAttack(object)
     end
 end
 function UpdateNote(sort, next,complete)
+    local phasename = {}
+    phasename[MoveSort] = "Activation"
+    phasename[AttackSort] = "Combat"
+    local phasecolor = {}
+    phasecolor[MoveSort] = "00FF80"
+    phasecolor[AttackSort] = "FF8000"
     local ai_string = ""
+    if currentphase ~= nil then
+        ai_string = "*** ["..phasecolor[currentphase].."]"..phasename[currentphase].." Phase[-] ***"
+    end
     local ais = {}
     local showPlayers = true
     for i,ship in ipairs(getAllObjects()) do
@@ -1413,16 +1472,21 @@ function prettyString(ship,withtarget)
             stress_end = "[-]"
         end
         if withtarget and aitargets[ship.getGUID()] then
-            local nops = string.gsub(aitargets[ship.getGUID()].getName(),"%[%d+%]%s*","")
+            local nops = stripPS(aitargets[ship.getGUID()].getName())
+            local nocolor = string.gsub(string.gsub(nops,"%[%w*%]",""),"%[%-%]","")
+            local short = string.sub(nocolor, 1,3)
+            local shortwithcolor = string.gsub(nops,nocolor,short)
             --local stripped_colors = nops:match
-            target = " [[00FF00][u]"..nops.."[/u][-]]"
+            target = " [101010][[-][u]"..shortwithcolor.."[/u][101010]][-]"
         end
         return stress.."PS["..skill_color.."]"..skill.."[-] ["..type_color.."]"..type.."[-] "..squad.."#"..number..stress_end..target,{0,0,1}
     else
-        return "PS["..skill_color.."]"..skill.."[-] [00FF00][u]"..string.gsub(ship.getName(),"%[%d+%]%s*","").."[/u][-]",{0,0,1}
+        return "PS["..skill_color.."]"..skill.."[-] "..stripPS(ship.getName()).."",{0,0,1}
     end
 end
-function stripPS() end
+function stripPS(name)
+    return string.gsub(name,"%[%d+%]%s*","")
+end
 function prettyPrint(ship)
     printToAll(prettyString(ship),{0,0,1})
 end
@@ -1494,15 +1558,15 @@ function State_AIMove(object)
     -- Set MOVE button
     local label = 'Move'
     if not isAi(object) then label = 'Next' end
-    local movebutton = {['click_function'] = 'Action_AiMove', ['label'] = label, ['position'] = {0, 0.3, -0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 750, ['height'] = 550, ['font_size'] = 550}
+    local movebutton = {['click_function'] = 'Action_AiMove', ['label'] = label, ['position'] = {0, 0.3, -0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 750, ['height'] = 550, ['font_size'] = 250}
     object.createButton(movebutton)
     if isAi(object) and getAiSquad(object)~=nil then
-        local squadbutton = {['click_function'] = 'AiSquadButton', ['label'] = 'Squad', ['position'] = {0, 0.3, 0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 750, ['height'] = 550, ['font_size'] = 550}
+        local squadbutton = {['click_function'] = 'AiSquadButton', ['label'] = 'Squad', ['position'] = {0, 0.3, 0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 750, ['height'] = 550, ['font_size'] = 250}
         object.createButton(squadbutton)
     end
-    if getAiType(object) == "PHA" then
-        Render_AiDecloak(object)
-    end
+    --if getAiType(object) == "PHA" then
+    --    Render_AiDecloak(object)
+    --end
 end
 function Action_AiMove(object)
     --object.setDescription("ai")
@@ -1555,10 +1619,19 @@ end
 
 
 function Render_Undo(object)
-    local undobutton = {['click_function'] = 'AiUndoButton', ['label'] = 'q', ['position'] = {-0.9, 0.3, -0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 550}
+    local undobutton = {['click_function'] = 'AiUndoButton', ['label'] = 'q', ['position'] = {-0.9, 0.3, -0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 250}
     object.createButton(undobutton)
 end
+function Render_AiUndoDecloak(object)
+    local undobutton = {['click_function'] = 'Action_AiUndoDecloak', ['label'] = 'q', ['position'] = {-0.9, 0.3, -0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 250}
+    object.createButton(undobutton)
+end
+function Action_AiUndoDecloak(object)
+    aidecloaked[object.getGUID()] = nil
+    object.setDescription("q")
+    Render_AiDecloak(object)
 
+end
 function AiUndoButton(object)
     aiswerved[object.getGUID()] = nil
     if squadleader[object.getGUID()]~=nil then
@@ -1574,8 +1647,8 @@ function AiUndoButton(object)
     State_AIMove(object)
 end
 
-function Render_AiUndoBoostBarrel(object)
-    local undobutton = {['click_function'] = 'Action_AiUndoBoostBarrel', ['label'] = 'q', ['position'] = {-0.9, 0.3, -0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 550}
+local function Render_AiUndoBoostBarrel(object)
+    local undobutton = {['click_function'] = 'Action_AiUndoBoostBarrel', ['label'] = 'q', ['position'] = {-0.9, 0.3, -0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 250}
     object.createButton(undobutton)
 end
 
@@ -1596,7 +1669,7 @@ function Action_AiUndoBoostBarrel(object)
 end
 
 function Render_Ruler(object)
-    local rulerbutton = {['click_function'] = 'RulerButton', ['label'] = 'r', ['position'] = {-0.9, 0.3, 0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 550}
+    local rulerbutton = {['click_function'] = 'RulerButton', ['label'] = 'r', ['position'] = {-0.9, 0.3, 0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 250}
     object.createButton(rulerbutton)
 end
 
@@ -1606,26 +1679,30 @@ end
 
 function Render_Boost(object)
 
-    local bl1button = {['click_function'] = 'Action_AiBoostLeft', ['label'] = 'bl1', ['position'] = {-1.1, 0.3, -1.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 330, ['height'] = 300, ['font_size'] = 300}
+    local bl1button = {['click_function'] = 'Action_AiBoostLeft', ['label'] = 'bl1', ['position'] = {-1.1, 0.3, -1.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 330, ['height'] = 300, ['font_size'] = 250}
     object.createButton(bl1button)
 
-    local s1button = {['click_function'] = 'Action_AiBoostStraight', ['label'] = 's1', ['position'] = {0, 0.3, -1.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 300, ['font_size'] = 300}
+    local s1button = {['click_function'] = 'Action_AiBoostStraight', ['label'] = 's1', ['position'] = {0, 0.3, -1.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 300, ['font_size'] = 250}
     object.createButton(s1button)
 
-    local br1button = {['click_function'] = 'Action_AiBoostRight', ['label'] = 'br1', ['position'] = {1.1, 0.3, -1.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 330, ['height'] = 300, ['font_size'] = 300}
+    local br1button = {['click_function'] = 'Action_AiBoostRight', ['label'] = 'br1', ['position'] = {1.1, 0.3, -1.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 330, ['height'] = 300, ['font_size'] = 250}
     object.createButton(br1button)
 end
 
 function Render_AiDecloak(object)
-    local decloak = {['click_function'] = 'Action_AiDecloak', ['label'] = 'decloak', ['position'] = {0, 0.3, -1.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 1000, ['height'] = 300, ['font_size'] = 300}
-    object.createButton(decloak)
+    if aidecloaked[object.getGUID()]==nil then
+        local decloak = {['click_function'] = 'Action_AiDecloak', ['label'] = 'decloak', ['position'] = {0, 0.3, -1.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 1000, ['height'] = 300, ['font_size'] = 250}
+        object.createButton(decloak)
+    end
 end
 
 function Action_AiDecloak(object)
     local i_roll = math.random(3)
     local options = {"ce","cs","cr" }
     object.setDescription(options[i_roll])
-    Render_Undo(object)
+    aidecloaked[object.getGUID()]= true
+    removeButtonByName(object, "decloak")
+    Render_AiUndoDecloak(object)
 end
 
 function Action_AiBoostLeft(object)
@@ -1654,10 +1731,10 @@ end
 
 function Render_BarrelRoll(object)
 
-    local xebbutton = {['click_function'] = 'Action_AiBarrelRollLeft', ['label'] = 'xl', ['position'] = {-1.6, 0.3, 0}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 300, ['font_size'] = 300}
+    local xebbutton = {['click_function'] = 'Action_AiBarrelRollLeft', ['label'] = 'xl', ['position'] = {-1.6, 0.3, 0}, ['rotation'] =  {0, 0, 0}, ['width'] = 300, ['height'] = 300, ['font_size'] = 250}
     object.createButton(xebbutton)
 
-    local xrbbutton = {['click_function'] = 'Action_AiBarrelRollRight', ['label'] = 'xr', ['position'] = {1.6, 0.3, 0}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 300, ['font_size'] = 300}
+    local xrbbutton = {['click_function'] = 'Action_AiBarrelRollRight', ['label'] = 'xr', ['position'] = {1.6, 0.3, 0}, ['rotation'] =  {0, 0, 0}, ['width'] = 300, ['height'] = 300, ['font_size'] = 250}
     object.createButton(xrbbutton)
 end
 
@@ -1679,12 +1756,12 @@ end
 
 function Render_AiFocusEvade(object)
 
-    local focusbutton = {['click_function'] = 'Action_Focus', ['label'] = 'F', ['position'] = {0.9, 0.3, -0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 550}
+    local focusbutton = {['click_function'] = 'Action_Focus', ['label'] = 'F', ['position'] = {0.9, 0.3, -0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 250}
     object.createButton(focusbutton)
 
     local type = getAiType(object);
     if type == "TIE" or type=="INT" or type == "ADV" or type == "PHA" then
-        local evadebutton = {['click_function'] = 'Action_Evade', ['label'] = 'E', ['position'] = {0.9, 0.3, 0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 550}
+        local evadebutton = {['click_function'] = 'Action_Evade', ['label'] = 'E', ['position'] = {0.9, 0.3, 0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 250}
         object.createButton(evadebutton)
     end
 end
@@ -1869,7 +1946,14 @@ function empty (self)
     end
     return true
 end
-
+function removeButtonByName(object, name)
+    for i,button in ipairs(object.getButtons()) do
+        if button.label == name then
+            object.removeButton(button.index)
+            return
+        end
+    end
+end
 function log(string)
     printToAll("[" .. os.date("%H:%M:%S") .. "] " .. string,{0, 0, 1})
 end
