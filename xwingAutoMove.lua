@@ -42,7 +42,7 @@ local ai_stress = false
 local ai_stress_delay = 0
 local current
 local currentphase
-
+local turn_marker
 function onload()
 --    --Auto Movement
 --    undolist = {}
@@ -96,6 +96,12 @@ function onload()
 
         local clearbutton = {['click_function'] = 'Action_EndPhase', ['label'] = 'End', ['position'] = {0, 0.3, 1.5}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 400, ['font_size'] = 250}
         aicard.createButton(clearbutton)
+    end
+    turn_marker = findObjectByName("Turn Marker")
+end
+function findObjectByName(name)
+    for i,obj in ipairs(getAllObjects()) do
+        if obj.getName()==name then return obj end
     end
 end
 function PlayerCheck(Color, GUID)
@@ -1383,6 +1389,22 @@ end
 
 
 function Action_EndPhase()
+    for i,obj in ipairs(getAllObjects()) do
+        if isInPlay(obj) and isTemporary(obj) then
+            obj.destruct()
+        end
+    end
+    setNotes("*** [FF0000]End Phase - Turn "..tostring(getTurnNumber()).."[-] ***")
+    local pos = turn_marker.getPosition()
+    turn_marker.setPosition({pos[1],pos[2],pos[3]-2.59})
+end
+function getTurnNumber()
+    local pos = turn_marker.getPosition()
+    return round((13.3-pos[3])/2.59 + 1)
+end
+function isTemporary(object)
+    local name = object.getName()
+    return (name=="Evade" or name=="Focus" or name=="Weapon Disabled" or name=="Reinforce") and object.getDescription()~="keep"
 end
 function Render_AttackButton(object)
 
@@ -1410,7 +1432,7 @@ function UpdateNote(sort, next,complete)
     phasecolor[AttackSort] = "FF8000"
     local ai_string = ""
     if currentphase ~= nil then
-        ai_string = "*** ["..phasecolor[currentphase].."]"..phasename[currentphase].." Phase[-] ***"
+        ai_string = "[u]*** ["..phasecolor[currentphase].."]"..phasename[currentphase].." Phase - Turn "..tostring(getTurnNumber()).."[-] ***[/u]"
     end
     local ais = {}
     local showPlayers = true
@@ -1929,7 +1951,7 @@ function getAiHasBarrelRoll(ai)
     return type == "TIE" or type == "INT" or type == "ADV"or type == "BOM" or type == "DEF" or type == "PHA"
 end
 function isInPlay(object)
-    return math.abs(object.getPosition()[1])<18 and math.abs(object.getPosition()[3])<18
+    return math.abs(object.getPosition()[1])<17 and math.abs(object.getPosition()[3])<17
 end
 function contains(self, val)
     for index, value in ipairs (self) do
