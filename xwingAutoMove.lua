@@ -4,85 +4,48 @@
 -- X-Wing AI Auto movement - Valadian, April 2016
 
 --Auto Movement
-local undolist = {}
-local undopos = {}
-local undorot = {}
-local namelist1 = {}
-local locktimer = {}
+undolist = {}
+undopos = {}
+undorot = {}
+namelist1 = {}
+locktimer = {}
 
 --Auto Dials
 --dial information
-local dialpositions = {}
+dialpositions = {}
 
 -- Auto Actions
-local focus = 'beca0f'
-local evade = '4a352e'
-local stress = 'a25e12'
+focus = 'beca0f'
+evade = '4a352e'
+stress = 'a25e12'
 
 -- AI
-local aitype = {}
-local striketarget
-local aicardguid = '2d84be'
-local squadleader = {}
-local squadmove = {}
-local squadposition = {}
-local squadrotation = {}
-local aimove = {}
-local aiswerved = {}
-local aitargets = {}
-local aistressed = {}
-local aidecloaked = {}
+aitype = {}
+striketarget = nil
+aicardguid = '2d84be'
+squadleader = {}
+squadmove = {}
+squadposition = {}
+squadrotation = {}
+aimove = {}
+aiswerved = {}
+aitargets = {}
+aistressed = {}
+aidecloaked = {}
 -- Auto Setup
-local missionzone = 'be00ff'
-local mission_ps
-local mission_players
-local players_up_next = {}
-local players_up_next_delay = 0
-local ai_stress = false
-local ai_stress_delay = 0
-local current
-local currentphase
-local turn_marker
+missionzone = '6fef74'
+mission_ps = nil
+mission_players = nil
+players_up_next = {}
+players_up_next_delay = 0
+ai_stress = false
+ai_stress_delay = 0
+current = nil
+currentphase = nil
+turn_marker = nil
+end_marker = nil
+
 function onload()
---    --Auto Movement
---    undolist = {}
---    undopos = {}
---    undorot = {}
---    namelist1 = {}
---    locktimer = {}
---
---    --Auto Dials
---    --dial information
---    dialpositions = {}
---
---    -- Auto Actions
---    focus = 'beca0f'
---    evade = '4a352e'
---    stress = 'a25e12'
---
---    -- AI
---    aitype = {}
---    striketarget = nil
---    aicardguid = '2d84be'
---    squadleader = {}
---    squadmove = {}
---    squadposition = {}
---    squadrotation = {}
---    aimove = {}
---    aiswerved = {}
---    aitargets = {}
---    aistressed = {}
---    aidecloaked = {}
---    -- Auto Setup
---    missionzone = 'be00ff'
---    mission_ps = nil
---    mission_players = nil
---    players_up_next = {}
---    players_up_next_delay = 0
---    ai_stress = false
---    ai_stress_delay = 0
---    current = nil
---    currentPhase = nil
     local aicard = getObjectFromGUID(aicardguid)
     if aicard then
         local prebutton = {['click_function'] = 'Action_PreMovePhase', ['label'] = 'Start Turn', ['position'] = {0, 0.3, -1.5}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 400, ['font_size'] = 250}
@@ -98,6 +61,7 @@ function onload()
         aicard.createButton(clearbutton)
     end
     turn_marker = findObjectByName("Turn Marker")
+    end_marker = findObjectByName("End Marker")
 end
 function findObjectByName(name)
     for i,obj in ipairs(getAllObjects()) do
@@ -348,6 +312,8 @@ function update ()
             local shipname = ship.getName()
             checkname(shipguid,shipdesc,shipname)
             check(shipguid,shipdesc)
+        elseif ship.getName():match "Turbolaser.*" and (ship.getDescription()=="r" or ship.getDescription()=="ruler") then
+            ruler(ship.getGUID())
         end
         if ship.getVar('Lock') == true and ship.held_by_color == nil and ship.resting == true then
             ship.setVar('Lock',false)
@@ -810,6 +776,12 @@ function ruler(guid)
     local direction = shipobject.getRotation()
     local world = shipobject.getPosition()
     local scale = shipobject.getScale()
+    -- Turbolaser models are not scaled correctly. hack it.
+    if shipname:match 'Turbolaser.*' then
+        local s = 0.6327
+        scale = {scale[1] * s,scale[2] * s,scale[3] * s}
+        direction[2] = direction[2] - 90
+    end
 
     local obj_parameters = {}
     obj_parameters.type = 'Custom_Model'
@@ -1394,12 +1366,22 @@ function Action_EndPhase()
             obj.destruct()
         end
     end
-    setNotes("*** [FF0000]End Phase - Turn "..tostring(getTurnNumber()).."[-] ***")
-    local pos = turn_marker.getPosition()
-    turn_marker.setPosition({pos[1],pos[2],pos[3]-2.59})
+    local note = "*** [FF0000]End Phase - Turn "..tostring(getTurnNumber()).."/"..tostring(getTotalTurns()).."[-] ***\n"
+    if getTurnNumber()==getTotalTurns() then
+        note = note.."[b]Mission Over[/b]"
+    else
+        note = note.."Auto-Cleaned up Focus/Evade/Etc\nMoved Turn Marker"
+        local pos = turn_marker.getPosition()
+        turn_marker.setPosition({pos[1],pos[2],pos[3]-2.59})
+    end
+    setNotes(note)
 end
 function getTurnNumber()
     local pos = turn_marker.getPosition()
+    return round((13.3-pos[3])/2.59 + 1)
+end
+function getTotalTurns()
+    local pos = end_marker.getPosition()
     return round((13.3-pos[3])/2.59 + 1)
 end
 function isTemporary(object)
@@ -1432,7 +1414,7 @@ function UpdateNote(sort, next,complete)
     phasecolor[AttackSort] = "FF8000"
     local ai_string = ""
     if currentphase ~= nil then
-        ai_string = "[u]*** ["..phasecolor[currentphase].."]"..phasename[currentphase].." Phase - Turn "..tostring(getTurnNumber()).."[-] ***[/u]"
+        ai_string = "*** ["..phasecolor[currentphase].."]"..phasename[currentphase].." Phase - Turn "..tostring(getTurnNumber()).."/"..tostring(getTotalTurns()).."[-] ***"
     end
     local ais = {}
     local showPlayers = true
@@ -2017,22 +1999,165 @@ function Action_SetPS9() SetPS(9) end
 function Action_SetPS10() SetPS(10) end
 function SetPS(num) mission_ps = num printToAll("Setting Average Pilot Skill (PS) of Players to: "..num,{0,1,1}) end
 
-TIE_SOURCE = '14a332'
+MESH= {
+    TIE = "https://paste.ee/r/Yz0kt",
+    INT = "https://paste.ee/r/JxWNX",
+    BOM = "https://paste.ee/r/5A0YG",
+    ADV = "https://paste.ee/r/NeptF",
+    SHU = "https://paste.ee/r/4uxZO",
+    DEF = "https://paste.ee/r/tIm5S",
+    PHA = "https://paste.ee/r/JN16g",
+    DEC = "https://paste.ee/r/MJOFI",
+    GR = "https://paste.ee/r/h5ND1",
+    YT = "https://paste.ee/r/kkPoB"
+}
+DIFFUSE = {
+    TIE = "http://i.imgur.com/otxKcUx.png",
+    INT = "http://www.fotos-hochladen.net/uploads/alphatex5hjsqnpatb.jpg",
+    BOM = "http://i.imgur.com/nYO1XwT.jpg",
+    ADV = "http://i.imgur.com/trxaCDg.jpg",
+    SHU = "http://i.imgur.com/rd9ZPz3.jpg",
+    DEF = "http://i.imgur.com/0u5rtnX.jpg",
+    PHA = "http://i.imgur.com/4bXBvZZ.jpg",
+    DEC = "http://i.imgur.com/atzM3rO.jpg",
+    GR = "http://i.imgur.com/Nur18O2.jpg",
+    YT = "http://i.imgur.com/QiomPcM.jpg"
+}
+COLLIDER = {
+    TIE = "https://paste.ee/r/1dx1C",
+    INT = "https://paste.ee/r/1dx1C",
+    BOM = "https://paste.ee/r/1dx1C",
+    ADV = "https://paste.ee/r/VAYqd",
+    SHU = "https://paste.ee/r/xBpMo",
+    DEF = "https://paste.ee/r/6jn13",
+    PHA = "https://paste.ee/r/1dx1C",
+    DEC = "https://paste.ee/r/JavTd",
+    GR = "https://paste.ee/r/qIaBu",
+    YT = "https://paste.ee/r/LIxnJ"
+}
+shipnum = 1
+missionsquads = {}
+missionvectors = {}
 function Action_setup(object)
     if mission_ps == nil or mission_players == nil then
         printToAll("Must select Number of players and Average Player Skill", {1,0,0})
     else
         local mission = object.getName():match '^Mission: (.*)'
-        local squads = {}
+        squads = {}
+        missionvectors = {}
         if mission == "Local Trouble" then
             printToAll("Setting up: "..mission, {0,1,0})
-            table.insert(squads, {name="Alpha",arrival=0,vector=3,ai="Attack",type="TIE",count={1,1,0,1,0,1}})
-            table.insert(squads, {name="Beta",arrival=0,vector=4,ai="Attack",type="TIE",count={1,0,1,0,1,0}})
-            table.insert(squads, {name="Gamma",arrival=4,vector="1d6",ai="Attack",type="INT",count={1,0,0,1,0,0}})
-            table.insert(squads, {name="Delta",arrival=7,vector="1d6",ai="Attack",type="TIE",count={0,1,1,0,1,1}})
+            table.insert(missionsquads, {name="Alpha",turn=0,vector=3,ai="attack",type="TIE",count={1,1,0,1,0,1}, elite=false})
+            table.insert(missionsquads, {name="Beta",turn=0,vector=4,ai="attack",type="TIE",count={1,0,1,0,1,0}, elite=false})
+            table.insert(missionsquads, {name="Gamma",turn=4,vector="1d6",ai="attack",type="INT",count={1,0,0,1,0,0}, elite=false})
+            table.insert(missionsquads, {name="Delta",turn=7,vector="1d6",ai="attack",type="TIE",count={0,1,1,0,1,1}, elite=false})
+            table.insert(missionvectors, {x=-4.5, y=-1.5, rot=90})
+            table.insert(missionvectors, {x=-4.5, y= 1.5, rot=90})
+            table.insert(missionvectors, {x=-1.5, y= 4.5, rot=180})
+            table.insert(missionvectors, {x= 1.5, y= 4.5, rot=180})
+            table.insert(missionvectors, {x= 4.5, y= 1.5, rot=-90})
+            table.insert(missionvectors, {x= 4.5, y=-1.5, rot=-90})
         end
         if mission == "Rescue Rebel Operatives" then
 
         end
+        if mission == "Test" then
+            shipnum = 1
+            Spawn_Squad(1,"TIE","Alpha",4, false)
+            Spawn_Squad(2,"INT","Beta",3, false)
+            Spawn_Squad(3,"ADV","Beta",2, false)
+            Spawn_Squad(4,"BOM","Gamma",1, false)
+            Spawn_Squad(5,"DEF","Gamma",3, false)
+            Spawn_Squad(6,"PHA","Gamma",4, false)
+            Spawn_Squad(7,"SHU","Gamma",1, false)
+            Spawn_Squad(8,"DEC","Gamma",1, false)
+        end
+
+        for i,squad in ipairs(missionsquads) do
+            Spawn_Squad(squad)
+        end
     end
+end
+PS =  {
+    TIE = {1, nil, nil, nil, nil},
+    INT = {1,4, 6, 8, 10},
+    ADV = {2,4, 6, 8, 10},
+    BOM = {2,3, 5, 7, 9},
+    DEF = {1,3, 5, 7, 9},
+    PHA = {3,3, 5, 7, 9},
+    SHU = {2,4, 4, 6, 8},
+    DEC = {3, nil, nil, nil, nil}
+}
+squad_offsets = {{0,0,0},{2.2,0,0},{0,0,-2.2},{2.2,0,-2.2} }
+squads = {}
+function Spawn_Squad(squad)
+    local quantity = countSquad(squad)
+    local position = {0,0,0 }
+    local rotation = 0
+    if squad.turn==0 then
+        position = calculateRealPosition(squad)
+        rotation = missionvectors[squad.vector].rot
+    else
+        position = calculateTempPosition(squad)
+    end
+    for i,off in ipairs(squad_offsets) do
+        if i<=quantity then
+            Spawn_Ship(squad.type, squad.name, squad.elite, add(position,off), rotation)
+        end
+    end
+    squads[squad.turn+1] = squad
+end
+function calculateRealPosition(squad)
+    return {missionvectors[squad.vector].x*3.6, 1, missionvectors[squad.vector].y*3.6}
+end
+function calculateTempPosition(squad)
+    local x = 21.7
+    if squads[squad.turn]~=nil and squads[squad.turn-1]~=nil then x = x+4.4 end
+    local position = {x, 1, 13.3 - (squad.turn-1)*2.59 }
+    if squad.turn == 0 then position = {-5, 1, 13.3} end
+    if squads[squad.turn+1]~=nil then position = add(position, {10,0,0}) end
+    return position
+end
+function countSquad(squad)
+    local number = 0
+    for i,s in ipairs(squad.count) do
+        if s>0 and i<=mission_players then number = number+1 end
+    end
+    return number
+end
+function add(pos, offset)
+    return {pos[1] + offset[1],pos[2] + offset[2],pos[3] + offset[3]}
+end
+
+function Spawn_Ship(type, name, elite, position, rotation)
+    local obj_parameters = {}
+    obj_parameters.type = 'Custom_Model'
+    obj_parameters.position = position
+
+    obj_parameters.rotation = { 0, 180+rotation, 0 }
+    local newship = spawnObject(obj_parameters)
+    local custom = {}
+    custom.mesh = MESH[type]
+    custom.diffuse = DIFFUSE[type]
+    custom.collider = COLLIDER[type]
+    custom.type = 1 --Figurine
+    custom.material = 1
+    custom.specular_intensity = 0
+    custom.specular_color = {223/255, 207/255, 190/255}
+    newship.setCustomObject(custom)
+    local ps = PS[type][1]
+    if elite then
+        if mission_ps >= 8 then ps = PS[type][5]
+        elseif mission_ps >= 6 then ps = PS[type][4]
+        elseif mission_ps >= 4 then ps = PS[type][3]
+        else ps = PS[type][2]
+        end
+    end
+    local size = ""
+    if type == "SHU" or type == "DEC" or type == "YT" then size = " LGS" end
+    newship.setName("[AI:"..type..":"..ps.."] "..name.."#"..tostring(shipnum)..size)
+    shipnum = shipnum + 1
+
+    newship.scale({0.6327,0.6327,0.6327})
+    --newship.lock()
 end
