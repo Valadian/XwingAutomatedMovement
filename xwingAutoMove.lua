@@ -18,7 +18,7 @@ dialpositions = {}
 focus = 'beca0f'
 evade = '4a352e'
 stress = 'a25e12'
-target = 'c81580'
+target = '5bd82a'
 
 -- AI
 aitype = {}
@@ -45,6 +45,7 @@ current = nil
 currentphase = nil
 turn_marker = nil
 end_marker = nil
+freshLock = nil
 
 function onload()
     local aicard = getObjectFromGUID(aicardguid)
@@ -122,11 +123,14 @@ end
 function CardFlipButton(object)
     local CardData = dialpositions[CardInArray(object.GetGUID())]
     if PlayerCheck(CardData["Color"],CardData["GUID"]) == true then
-        local rot = getObjectFromGUID(CardData["ShipGUID"]).getRotation()
-        object.setRotation({0,rot[2],0})
+        -- local rot = getObjectFromGUID(CardData["ShipGUID"]).getRotation()
+        -- object.setRotation({0,rot[2],0})
+        object.setRotation({0,CardData["Rotation"][2],0})
         object.clearButtons()
-        local movebutton = {['click_function'] = 'CardMoveButton', ['label'] = 'Move', ['position'] = {0, 1, '.9'}, ['rotation'] =  {0, 0, 0}, ['width'] = 750, ['height'] = 550, ['font_size'] = 250}
+        local movebutton = {['click_function'] = 'CardMoveButton', ['label'] = 'Move', ['position'] = {-0.32, 1, 1}, ['rotation'] =  {0, 0, 0}, ['width'] = 750, ['height'] = 530, ['font_size'] = 250}
         object.createButton(movebutton)
+        local actionbuttonbefore = {['click_function'] = 'CardActionButtonBefore', ['label'] = 'A', ['position'] = {'-.9', 1, 0}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 250}
+        object.createButton(actionbuttonbefore)
     end
 end
 
@@ -136,29 +140,214 @@ function CardMoveButton(object)
     if PlayerCheck(CardData["Color"],CardData["GUID"]) == true then
         check(CardData["ShipGUID"],object.getDescription())
         object.clearButtons()
-
-        local deletebutton = {['click_function'] = 'CardDeleteButton', ['label'] = 'Delete', ['position'] = {'-.35', 1, 1}, ['rotation'] =  {0, 0, 0}, ['width'] = 750, ['height'] = 650, ['font_size'] = 250}
+        CardData["ActionDisplayed"] = false
+        CardData["BoostDisplayed"] = false
+        CardData["BarrelRollDisplayed"] = false
+        local deletebutton = {['click_function'] = 'CardDeleteButton', ['label'] = 'Delete', ['position'] = {-0.32, 1, 1}, ['rotation'] =  {0, 0, 0}, ['width'] = 750, ['height'] = 530, ['font_size'] = 250}
         object.createButton(deletebutton)
 
-        local undobutton = {['click_function'] = 'CardUndoButton', ['label'] = 'q', ['position'] = {'-.9', 1, -1}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 250}
+        local undobutton = {['click_function'] = 'CardUndoButton', ['label'] = 'Q', ['position'] = {-0.9, 1, -1}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 250}
         object.createButton(undobutton)
 
-        local focusbutton = {['click_function'] = 'CardFocusButton', ['label'] = 'F', ['position'] = {'.9', 1, -1}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 250}
+        local actionbuttonafter = {['click_function'] = 'CardActionButtonAfter', ['label'] = 'A', ['position'] = {-0.9, 1, 0}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 250}
+        object.createButton(actionbuttonafter)
+
+        local focusbutton = {['click_function'] = 'CardFocusButton', ['label'] = 'F', ['position'] = {0.9, 1, -1}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 250}
         object.createButton(focusbutton)
 
-        local stressbutton = {['click_function'] = 'CardStressButton', ['label'] = 'S', ['position'] = {'.9', 1, 0}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 250}
+        local stressbutton = {['click_function'] = 'CardStressButton', ['label'] = 'S', ['position'] = {0.9, 1, 0}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 250}
         object.createButton(stressbutton)
 
-        local evadebutton = {['click_function'] = 'CardEvadeButton', ['label'] = 'E', ['position'] = {'.9', 1, 1}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 250}
+        local evadebutton = {['click_function'] = 'CardEvadeButton', ['label'] = 'E', ['position'] = {0.9, 1, 1}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 250}
         object.createButton(evadebutton)
+    end
+end
 
+function CallActionButton(object, beforeORafter)
+    --1 before 2 after
+    if CardData["ActionDisplayed"] == false then
+        CardData["ActionDisplayed"] = true
+        if beforeORafter == 1 then
+            local focusbutton = {['click_function'] = 'CardFocusButton', ['label'] = 'F', ['position'] = {0.9, 1, -1}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 250}
+            object.createButton(focusbutton)
+            local stressbutton = {['click_function'] = 'CardStressButton', ['label'] = 'S', ['position'] = {0.9, 1, 0}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 250}
+            object.createButton(stressbutton)
+            local Evadebutton = {['click_function'] = 'CardEvadeButton', ['label'] = 'E', ['position'] = {0.9, 1, 1}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 250}
+            object.createButton(Evadebutton)
+            local undobutton = {['click_function'] = 'CardUndoButton', ['label'] = 'Q', ['position'] = {-0.9, 1, -1}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 250}
+            object.createButton(undobutton)
+        end
+        local BoostLeft = {['click_function'] = 'CardBoostLeft', ['label'] = 'BL', ['position'] = {-0.75, 1, -2.2}, ['rotation'] =  {0, 0, 0}, ['width'] = 365, ['height'] = 530, ['font_size'] = 250}
+        object.createButton(BoostLeft)
+        local BoostCenter = {['click_function'] = 'CardBoostCenter', ['label'] = 'B', ['position'] = {0, 1, -2.2}, ['rotation'] =  {0, 0, 0}, ['width'] = 365, ['height'] = 530, ['font_size'] = 250}
+        object.createButton(BoostCenter)
+        local BoostRight = {['click_function'] = 'CardBoostRight', ['label'] = 'BR', ['position'] = {0.75, 1, -2.2}, ['rotation'] =  {0, 0, 0}, ['width'] = 365, ['height'] = 530, ['font_size'] = 250}
+        object.createButton(BoostRight)
+        local BRLeftTop = {['click_function'] = 'CardBRLeftTop', ['label'] = 'XF', ['position'] = {-1.5, 1, -1}, ['rotation'] =  {0, 0, 0}, ['width'] = 365, ['height'] = 530, ['font_size'] = 250}
+        object.createButton(BRLeftTop)
+        local BRLeftCenter = {['click_function'] = 'CardBRLeftCenter', ['label'] = 'XL', ['position'] = {-1.5, 1, 0}, ['rotation'] =  {0, 0, 0}, ['width'] = 365, ['height'] = 530, ['font_size'] = 250}
+        object.createButton(BRLeftCenter)
+        local BRLeftBack = {['click_function'] = 'CardBRLeftBack', ['label'] = 'XB', ['position'] = {-1.5, 1, 1}, ['rotation'] =  {0, 0, 0}, ['width'] = 365, ['height'] = 530, ['font_size'] = 250}
+        object.createButton(BRLeftBack)
+        local BRRightTop = {['click_function'] = 'CardBRRightTop', ['label'] = 'XF', ['position'] = {1.5, 1, -1}, ['rotation'] =  {0, 0, 0}, ['width'] = 365, ['height'] = 530, ['font_size'] = 250}
+        object.createButton(BRRightTop)
+        local BRRightCenter = {['click_function'] = 'CardRightCenter', ['label'] = 'XR', ['position'] = {1.5, 1, 0}, ['rotation'] =  {0, 0, 0}, ['width'] = 365, ['height'] = 530, ['font_size'] = 250}
+        object.createButton(BRRightCenter)
+        local BRRightBack = {['click_function'] = 'CardRightBack', ['label'] = 'XB', ['position'] = {1.5, 1, 1}, ['rotation'] =  {0, 0, 0}, ['width'] = 365, ['height'] = 530, ['font_size'] = 250}
+        object.createButton(BRRightBack)
+        local TargetLock = {['click_function'] = 'CardTargetLock', ['label'] = 'TL', ['position'] = {-0.75, 1, 2.2}, ['rotation'] =  {0, 0, 0}, ['width'] = 365, ['height'] = 530, ['font_size'] = 250}
+        object.createButton(TargetLock)
+        local rangebutton = {['click_function'] = 'CardRangeButton', ['label'] = 'R', ['position'] = {0.75, 1, 2.2}, ['rotation'] =  {0, 0, 0}, ['width'] = 365, ['height'] = 530, ['font_size'] = 250}
+        object.createButton(rangebutton)
+    else
+        CardData["ActionDisplayed"] = false
+        CardData["BoostDisplayed"] = false
+        CardData["BarrelRollDisplayed"] = false
+        if beforeORafter == 1 then
+            object.removeButton(2)
+            object.removeButton(3)
+            object.removeButton(4)
+            object.removeButton(5)
+        end
+        object.removeButton(6)
+        object.removeButton(7)
+        object.removeButton(8)
+        object.removeButton(9)
+        object.removeButton(10)
+        object.removeButton(11)
+        object.removeButton(12)
+        object.removeButton(13)
+        object.removeButton(14)
+        object.removeButton(15)
+        object.removeButton(16)
+
+    end
+end
+
+
+function CardActionButtonBefore(object)
+    CardData = dialpositions[CardInArray(object.GetGUID())]
+    if PlayerCheck(CardData["Color"],CardData["GUID"]) == true then
+        CallActionButton(object,1)
+    end
+end
+
+function CardActionButtonAfter(object)
+    CardData = dialpositions[CardInArray(object.GetGUID())]
+    if PlayerCheck(CardData["Color"],CardData["GUID"]) == true then
+        CallActionButton(object,2)
+    end
+end
+
+
+
+function CardRangeButton(object)
+    CardData = dialpositions[CardInArray(object.GetGUID())]
+    if PlayerCheck(CardData["Color"],CardData["GUID"]) == true then
+        if CardData["RangeDisplayed"] == false then
+            CardData["RangeDisplayed"] = true
+            CardData["RulerObject"] = ruler(CardData["ShipGUID"],2)
+        else
+            CardData["RangeDisplayed"] = false
+            actionButton(CardData["RulerObject"])
+        end
+    end
+end
+
+function CardBoostLeft(object)
+    CardData = dialpositions[CardInArray(object.GetGUID())]
+    if PlayerCheck(CardData["Color"],CardData["GUID"]) == true then
+        if CardData["BoostDisplayed"] == false then
+            CardData["BoostDisplayed"] = true
+            check(CardData["ShipGUID"],'bl1')
+        end
+    end
+end
+function CardBoostCenter(object)
+    CardData = dialpositions[CardInArray(object.GetGUID())]
+    if PlayerCheck(CardData["Color"],CardData["GUID"]) == true then
+        if CardData["BoostDisplayed"] == false then
+            CardData["BoostDisplayed"] = true
+            check(CardData["ShipGUID"],'s1')
+        end
+    end
+end
+function CardBoostRight(object)
+    CardData = dialpositions[CardInArray(object.GetGUID())]
+    if PlayerCheck(CardData["Color"],CardData["GUID"]) == true then
+        if CardData["BoostDisplayed"] == false then
+            CardData["BoostDisplayed"] = true
+            check(CardData["ShipGUID"],'br1')
+        end
+    end
+end
+function CardBRLeftTop(object)
+    CardData = dialpositions[CardInArray(object.GetGUID())]
+    if PlayerCheck(CardData["Color"],CardData["GUID"]) == true then
+        if CardData["BarrelRollDisplayed"] == false then
+            CardData["BarrelRollDisplayed"] = true
+            check(CardData["ShipGUID"],'xlf')
+        end
+    end
+end
+function CardBRLeftCenter(object)
+    CardData = dialpositions[CardInArray(object.GetGUID())]
+    if PlayerCheck(CardData["Color"],CardData["GUID"]) == true then
+        if CardData["BarrelRollDisplayed"] == false then
+            CardData["BarrelRollDisplayed"] = true
+            check(CardData["ShipGUID"],'xl')
+        end
+    end
+end
+function CardBRLeftBack(object)
+    CardData = dialpositions[CardInArray(object.GetGUID())]
+    if PlayerCheck(CardData["Color"],CardData["GUID"]) == true then
+        if CardData["BarrelRollDisplayed"] == false then
+            CardData["BarrelRollDisplayed"] = true
+            check(CardData["ShipGUID"],'xlb')
+        end
+    end
+end
+function CardBRRightTop(object)
+    CardData = dialpositions[CardInArray(object.GetGUID())]
+    if PlayerCheck(CardData["Color"],CardData["GUID"]) == true then
+        if CardData["BarrelRollDisplayed"] == false then
+            CardData["BarrelRollDisplayed"] = true
+            check(CardData["ShipGUID"],'xrf')
+        end
+    end
+end
+function CardRightCenter(object)
+    CardData = dialpositions[CardInArray(object.GetGUID())]
+    if PlayerCheck(CardData["Color"],CardData["GUID"]) == true then
+        if CardData["BarrelRollDisplayed"] == false then
+            CardData["BarrelRollDisplayed"] = true
+            check(CardData["ShipGUID"],'xr')
+        end
+    end
+end
+function CardRightBack(object)
+    CardData = dialpositions[CardInArray(object.GetGUID())]
+    if PlayerCheck(CardData["Color"],CardData["GUID"]) == true then
+        if CardData["BarrelRollDisplayed"] == false then
+            CardData["BarrelRollDisplayed"] = true
+            check(CardData["ShipGUID"],'xrb')
+        end
+    end
+end
+
+function CardTargetLock(object)
+    CardData = dialpositions[CardInArray(object.GetGUID())]
+    if PlayerCheck(CardData["Color"],CardData["GUID"]) == true then
+        take(target, CardData["ShipGUID"],0.37,1,-0.37,true,CardData["Color"],CardData["ShipName"])
+        notify(CardData["ShipGUID"],'action','acquires a target lock')
     end
 end
 
 function CardFocusButton(object)
     local CardData = dialpositions[CardInArray(object.GetGUID())]
     if PlayerCheck(CardData["Color"],CardData["GUID"]) == true then
-        take(focus, CardData["ShipGUID"],-0.3,1,-0.3)
+        take(focus, CardData["ShipGUID"],-0.37,1,-0.37,false,0,0)
         notify(CardData["ShipGUID"],'action','takes a focus token')
     end
 end
@@ -166,7 +355,7 @@ end
 function CardStressButton(object)
     local CardData = dialpositions[CardInArray(object.GetGUID())]
     if PlayerCheck(CardData["Color"],CardData["GUID"]) == true then
-        take(stress, CardData["ShipGUID"],0.3,1,0.3)
+        take(stress, CardData["ShipGUID"],0.37,1,0.37,false,0,0)
         notify(CardData["ShipGUID"],'action','takes stress')
     end
 end
@@ -174,7 +363,7 @@ end
 function CardEvadeButton(object)
     local CardData = dialpositions[CardInArray(object.GetGUID())]
     if PlayerCheck(CardData["Color"],CardData["GUID"]) == true then
-        take(evade, CardData["ShipGUID"],-0.5,1,0.5)
+        take(evade, CardData["ShipGUID"],-0.37,1,0.37,false,0,0)
         notify(CardData["ShipGUID"],'action','takes an evade token')
     end
 end
@@ -183,7 +372,8 @@ function CardUndoButton(object)
     local CardData = dialpositions[CardInArray(object.GetGUID())]
     if PlayerCheck(CardData["Color"],CardData["GUID"]) == true then
         check(CardData["ShipGUID"],'undo')
-        object.removeButton(1)
+        CardData["BoostDisplayed"] = false
+        CardData["BarrelRollDisplayed"] = false
     end
 end
 
@@ -240,6 +430,11 @@ function checkdials(guid)
                         cardtable["Rotation"] = card.getRotation()
                         cardtable["ShipGUID"] = obj.getGUID()
                         cardtable["ShipName"] = obj.getName()
+                        cardtable["ActionDisplayed"] = false
+                        cardtable["BoostDisplayed"] = false
+                        cardtable["BarrelRollDisplayed"] = false
+                        cardtable["RangeDisplayed"] = false
+                        cardtable["RulerObject"] = nil
                         cardtable["Color"] = nil
                         obj.setVar('HasDial',false)
                         dialpositions[#dialpositions +1] = cardtable
@@ -338,14 +533,26 @@ function round(num, idp)
     else return math.ceil(num * mult - 0.5) / mult end
 end
 
-function take(parent, guid, xoff, yoff, zoff)
+function take(parent, guid, xoff, yoff, zoff, TL, color, name)
     local obj = getObjectFromGUID(guid)
     local objp = getObjectFromGUID(parent)
     local world = obj.getPosition()
     local offset = RotateVector({xoff, yoff, zoff}, obj.getRotation()[2])
     local params = {}
     params.position = {world[1]+offset[1], world[2]+offset[2], world[3]+offset[3]}
-    objp.takeObject(params)
+    if TL == true then
+        local callback_params = {}
+        callback_params['player_color'] = color
+        callback_params['ship_name'] = name
+        params.callback = 'setNewLock'
+        params.callback_owner = Global
+        params.params = callback_params
+    end
+    freshLock = objp.takeObject(params)
+end
+
+function setNewLock(object, params)
+    freshLock.call('manualSet', {params['player_color'], params['ship_name']})
 end
 
 function undo(guid)
@@ -457,7 +664,7 @@ function check(guid,move)
 
     --Ruler
     if move == 'r' or move == 'ruler' then
-        ruler(guid)
+        ruler(guid,1)
     end
 
     --DialCheck
@@ -774,7 +981,7 @@ function checkrot(guid)
     end
 end
 
-function ruler(guid)
+function ruler(guid,action)
 
     local shipobject = getObjectFromGUID(guid)
     local shipname = shipobject.getName()
@@ -805,8 +1012,12 @@ function ruler(guid)
     newruler.lock()
     newruler.scale(scale)
     setpending(guid)
-    local button = {['click_function'] = 'actionButton', ['label'] = 'Remove', ['position'] = {0, 0.5, 0}, ['rotation'] =  {0, 0, 0}, ['width'] = 1500, ['height'] = 1500, ['font_size'] = 500}
-    newruler.createButton(button)
+    if action == 2 then
+        return newruler
+    else
+        local button = {['click_function'] = 'actionButton', ['label'] = 'Remove', ['position'] = {0, 0.5, 0}, ['rotation'] =  {0, 0, 0}, ['width'] = 1500, ['height'] = 1500, ['font_size'] = 500}
+        newruler.createButton(button)
+    end
     notify(guid,'r')
 end
 
@@ -1709,7 +1920,7 @@ function AiUndoButton(object)
     State_AIMove(object)
 end
 
-local function Render_AiUndoBoostBarrel(object)
+function Render_AiUndoBoostBarrel(object)
     local undobutton = {['click_function'] = 'Action_AiUndoBoostBarrel', ['label'] = 'q', ['position'] = {-0.9, 0.3, -0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 250}
     object.createButton(undobutton)
 end
