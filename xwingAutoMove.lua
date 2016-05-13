@@ -18,6 +18,7 @@ dialpositions = {}
 focus = 'beca0f'
 evade = '4a352e'
 stress = 'a25e12'
+target = 'c81580'
 
 -- AI
 aitype = {}
@@ -195,6 +196,7 @@ function CardDeleteButton(object)
         object.setPosition (CardData["Position"])
         object.setRotation (CardData["Rotation"])
         CardData["Color"] = nil
+        Action_AiMove(getObjectFromGUID(CardData["ShipGUID"]))
     end
 end
 
@@ -1510,7 +1512,10 @@ function prettyString(ship,withtarget)
     local type_colors = {TIE="666666",INT="600000",ADV="c1440e",BOM="00FFFF",DEF="660066",PHA="2C75FF",DEC="808080",SHU="A0A0A0"}
     local isAi = isAi(ship)
     local skill = tostring(getSkill(ship))
-    local skill_color = skill_colors[tonumber(skill)+1]
+    local skill_color
+    if skill~="nil" then
+        skill_color = skill_colors[tonumber(skill)+1]
+    end
     if skill_color==nil then skill_color="000000" end
     if isAi then
         local type = tostring(getAiType(ship))
@@ -1967,6 +1972,7 @@ function getAiType(ai)
     end
 end
 function getSkill(ai)
+    if ai == nil then return nil end
     return ai.getName():match '^%[%a*:?%u*:?(%d*)].*'
 end
 function getAiSquad(ai)
