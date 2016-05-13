@@ -48,7 +48,7 @@ end_marker = nil
 function onload()
     local aicard = getObjectFromGUID(aicardguid)
     if aicard then
-        local prebutton = {['click_function'] = 'Action_PreMovePhase', ['label'] = 'Start Turn', ['position'] = {0, 0.3, -1.5}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 400, ['font_size'] = 250}
+        local prebutton = {['click_function'] = 'Action_PlanningPhase', ['label'] = 'Planning', ['position'] = {0, 0.3, -1.5}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 400, ['font_size'] = 250}
         aicard.createButton(prebutton)
 
         local flipbutton = {['click_function'] = 'Action_MovePhase', ['label'] = 'Activation', ['position'] = {0, 0.3, -0.5}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 400, ['font_size'] = 250}
@@ -89,9 +89,10 @@ function onObjectLeaveScriptingZone(zone, object)
         if CardData ~= nil then
             local obj = getObjectFromGUID(CardData["ShipGUID"])
             if obj.getVar('HasDial') == true then
-                printToColor(CardData["ShipName"] .. ' already has a dial.', object.held_by_color, {0, 0, 1})
+                printToColor(CardData["ShipName"] .. ' already has a dial.', object.held_by_color, {0.2, 0.2, 0.8})
             else
                 obj.setVar('HasDial', true)
+                obj.setVar('Maneuver', object.getDescription())
                 CardData["Color"] = object.held_by_color
 
                 local flipbutton = {['click_function'] = 'CardFlipButton', ['label'] = 'Flip', ['position'] = {0, -1, 1}, ['rotation'] =  {0, 0, 180}, ['width'] = 750, ['height'] = 550, ['font_size'] = 250}
@@ -102,7 +103,7 @@ function onObjectLeaveScriptingZone(zone, object)
                 object.setVar('Lock',true)
             end
         else
-            printToColor('That dial was not saved.', object.held_by_color, {0, 0, 1})
+            printToColor('That dial was not saved.', object.held_by_color, {0.2, 0.2, 0.8})
         end
     end
 end
@@ -207,7 +208,7 @@ function resetdials(guid,notice)
     end
     obj.setVar('HasDial',false)
     if notice == 1 then
-        printToAll(#index .. ' dials removed for ' .. obj.getName() .. '.', {0, 0, 1})
+        printToAll(#index .. ' dials removed for ' .. obj.getName() .. '.', {0.2, 0.2, 0.8})
     end
     for i=#index,1,-1 do
         table.remove(dialpositions, index[i])
@@ -254,19 +255,19 @@ function checkdials(guid)
         end
     end
     if display == true then
-        printToAll('Error: ' .. obj.getName() .. ' attempted to save dials already saved to another ship. Use rd on old ship first.',{0, 0, 1})
+        printToAll('Error: ' .. obj.getName() .. ' attempted to save dials already saved to another ship. Use rd on old ship first.',{0.2, 0.2, 0.8})
     end
     if deckerror == true then
-        printToAll('Error: Cannot save dials in deck format.',{0, 0, 1})
+        printToAll('Error: Cannot save dials in deck format.',{0.2, 0.2, 0.8})
     end
     if error == true then
-        printToAll('Caution: Cannot save dials in main play area.',{0, 0, 1})
+        printToAll('Caution: Cannot save dials in main play area.',{0.2, 0.2, 0.8})
     end
     if count <= 17 then
-        printToAll(count .. ' dials saved for ' .. obj.getName() .. '.', {0, 0, 1})
+        printToAll(count .. ' dials saved for ' .. obj.getName() .. '.', {0.2, 0.2, 0.8})
     else
         resetdials(guid,0)
-        printToAll('Error: Tried to save to many dials for ' .. obj.getName() .. '.', {0, 0, 1})
+        printToAll('Error: Tried to save to many dials for ' .. obj.getName() .. '.', {0.2, 0.2, 0.8})
     end
     setpending(guid)
 end
@@ -320,6 +321,8 @@ function update ()
             ship.lock()
         end
     end
+
+    UpdatePlanningNote()
 end
 
 function round(x)
@@ -414,7 +417,7 @@ function notify(guid,move,text)
     elseif move == 'set' then
         printToAll(name .. ' set name.', {0, 1, 1})
     elseif move == 'r' then
-        printToAll(name .. ' spawned a ruler.', {0, 0, 1})
+        printToAll(name .. ' spawned a ruler.', {0.2, 0.2, 0.8})
     elseif move == 'action' then
         printToAll(name .. ' ' .. text .. '.', {0.959999978542328 , 0.439000010490417 , 0.806999981403351})
     elseif move == 'keep' then
@@ -486,7 +489,7 @@ function check(guid,move)
     if move == 'ai striketarget' then
         striketarget = guid
         local ship = getObjectFromGUID(guid)
-        printToAll('Strike Target Set: ' .. ship.getName(),{0, 0, 1})
+        printToAll('Strike Target Set: ' .. ship.getName(),{0.2, 0.2, 0.8})
         setpending(guid)
     end
     if move:match "ai target (.*)"~=nil then
@@ -903,7 +906,7 @@ function auto(guid)
 --    end
     local tgt = findAiTarget(guid)
     if tgt == nil then
-        printToAll('Error: AI ' .. ai.getName() .. ' has no target',{0, 0, 1})
+        printToAll('Error: AI ' .. ai.getName() .. ' has no target',{0.2, 0.2, 0.8})
         setpending(guid)
     else
         -- local tgt = getObjectFromGUID(tgtGuid)
@@ -1297,7 +1300,10 @@ function RotateVector(direction, yRotation)
     local zDistance = math.sin(radrotval) * direction[1] * -1 + math.cos(radrotval) * direction[3]
     return {xDistance, direction[2], zDistance}
 end
-
+function Action_PlanningPhase()
+    currentphase = PlanningSort
+    UpdatePlanningNote()
+end
 function Action_MovePhase()
     -- printToAll("*****************************",{0,1,1})
     -- printToAll("STARTING ACTIVATION PHASE",{0,1,1})
@@ -1376,13 +1382,33 @@ function Action_EndPhase()
     end
     setNotes(note)
 end
+turn_marker_warning = false
 function getTurnNumber()
-    local pos = turn_marker.getPosition()
-    return round((13.3-pos[3])/2.59 + 1)
+    local turn = 1
+    if turn_marker ~=nil then
+        local pos = turn_marker.getPosition()
+        turn = round((13.3-pos[3])/2.59 + 1)
+    else
+        if not turn_marker_warning then
+            printToAll("Add object with name 'Turn Marker' on Turn Track",{1,0,0})
+            turn_marker_warning = true
+        end
+    end
+    return turn
 end
+end_marker_warning = false
 function getTotalTurns()
-    local pos = end_marker.getPosition()
-    return round((13.3-pos[3])/2.59 + 1)
+    local total = 12
+    if end_marker ~=nil then
+        local pos = end_marker.getPosition()
+        total = round((13.3-pos[3])/2.59 + 1)
+    else
+        if not end_marker_warning then
+            printToAll("Add object with name 'End Marker' on Turn Track",{1,0,0})
+            end_marker_warning = true
+        end
+    end
+    return total
 end
 function isTemporary(object)
     local name = object.getName()
@@ -1439,6 +1465,32 @@ function UpdateNote(sort, next,complete)
     end
     setNotes(ai_string)
 end
+
+function UpdatePlanningNote()
+    if currentphase == PlanningSort then
+        local ai_string = "*** [FF80FF]Planning Phase - Turn "..tostring(getTurnNumber()).."/"..tostring(getTotalTurns()).."[-] ***"
+        for i,ship in ipairs(getAllObjects()) do
+            if isShip(ship) and not isAi(ship) then
+                local status = "Waiting"
+                local statuscolor = "FF0000"
+                local found = ship.getVar('HasDial')
+                local maneuver = ""
+--                for j,card in ipairs(getAllObjects()) do
+--                    if isInPlay(card) and card.tag ~= 'Figurine' and card.getName()==ship.getName() then
+--                        found = true
+--                    end
+--                end
+                if found then
+                    status = "Ready"
+                    statuscolor = "00FF00"
+                    maneuver = " [101010]([-] "..ship.getVar('Maneuver').." [101010])[-]"
+                end
+                ai_string = ai_string .."\n".. prettyString(ship, false)..maneuver.." [101010][[-]["..statuscolor.."]"..status.."[-][101010]][-]"
+            end
+        end
+        setNotes(ai_string)
+    end
+end
 function ListAis(sort)
     printToAll("Sorting AIs, Found:",{0,1,0})
     local ais = {}
@@ -1483,16 +1535,16 @@ function prettyString(ship,withtarget)
             --local stripped_colors = nops:match
             target = " [101010][[-][u]"..shortwithcolor.."[/u][101010]][-]"
         end
-        return stress.."PS["..skill_color.."]"..skill.."[-] ["..type_color.."]"..type.."[-] "..squad.."#"..number..stress_end..target,{0,0,1}
+        return stress.."PS["..skill_color.."]"..skill.."[-] ["..type_color.."]"..type.."[-] "..squad.."#"..number..stress_end..target --,{0,0,1}
     else
-        return "PS["..skill_color.."]"..skill.."[-] "..stripPS(ship.getName()).."",{0,0,1}
+        return "PS["..skill_color.."]"..skill.."[-] "..stripPS(ship.getName()).."" --,{0,0,1}
     end
 end
 function stripPS(name)
     return string.gsub(name,"%[%d+%]%s*","")
 end
 function prettyPrint(ship)
-    printToAll(prettyString(ship),{0,0,1})
+    printToAll(prettyString(ship),{0.2, 0.2, 0.8})
 end
 function FindNextAi(guid, sort)
     local ais = {}
@@ -1540,6 +1592,7 @@ function AttackSort(a, b)
         end
     end
 end
+function PlanningSort(a, b) end
 function MoveSort(a, b)
     local a_ps = tonumber(getSkill(a))
     local a_num = tonumber(getAiNumber(a))
@@ -1959,7 +2012,7 @@ function removeButtonByName(object, name)
     end
 end
 function log(string)
-    printToAll("[" .. os.date("%H:%M:%S") .. "] " .. string,{0, 0, 1})
+    printToAll("[" .. os.date("%H:%M:%S") .. "] " .. string,{0.2, 0.2, 0.8})
 end
 
 function onObjectEnterScriptingZone(zone, object)
