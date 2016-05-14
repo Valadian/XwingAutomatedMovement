@@ -15,16 +15,16 @@ locktimer = {}
 dialpositions = {}
 
 -- Auto Actions
-focus = 'beca0f'
-evade = '4a352e'
-stress = 'a25e12'
-target = '5bd82a'
+focus = nil --'beca0f'
+evade = nil --'4a352e'
+stress = nil --'a25e12'
+target = nil --'5bd82a'
 enemy_target_locks = nil
 
 -- AI
 aitype = {}
 striketarget = nil
-aicardguid = '2d84be'
+-- aicardguid = '2d84be'
 squadleader = {}
 squadmove = {}
 squadposition = {}
@@ -49,7 +49,8 @@ end_marker = nil
 freshLock = nil
 
 function onload()
-    local aicard = getObjectFromGUID(aicardguid)
+    --local aicard = getObjectFromGUID(aicardguid)
+    local aicard = findObjectByName("AI Action Card")
     if aicard then
         local prebutton = {['click_function'] = 'Action_PlanningPhase', ['label'] = 'Planning', ['position'] = {0, 0.3, -1.5}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 400, ['font_size'] = 250}
         aicard.createButton(prebutton)
@@ -65,11 +66,20 @@ function onload()
     end
     turn_marker = findObjectByName("Turn Marker")
     end_marker = findObjectByName("End Marker")
-    enemy_target_locks = findObjectByName("Enemy Target Locks")
+    enemy_target_locks = findObjectByNameAndType("Enemy Target Locks", "Infinite")
+    focus = findObjectByNameAndType("Focus", "Infinite")
+    evade = findObjectByNameAndType("Evade", "Infinite")
+    stress = findObjectByNameAndType("Stress", "Infinite")
+    target = findObjectByNameAndType("Target Lock", "Infinite")
 end
 function findObjectByName(name)
     for i,obj in ipairs(getAllObjects()) do
         if obj.getName()==name then return obj end
+    end
+end
+function findObjectByNameAndType(name, type)
+    for i,obj in ipairs(getAllObjects()) do
+        if obj.getName()==name and obj.tag == type then return obj end
     end
 end
 function PlayerCheck(Color, GUID)
@@ -341,7 +351,7 @@ end
 function CardTargetLock(object)
     CardData = dialpositions[CardInArray(object.GetGUID())]
     if PlayerCheck(CardData["Color"],CardData["GUID"]) == true then
-        take(target, CardData["ShipGUID"],0.37,1,-0.37,true,CardData["Color"],CardData["ShipName"])
+        take(target.getGUID(), CardData["ShipGUID"],0.37,1,-0.37,true,CardData["Color"],CardData["ShipName"])
         notify(CardData["ShipGUID"],'action','acquires a target lock')
     end
 end
@@ -349,7 +359,7 @@ end
 function CardFocusButton(object)
     local CardData = dialpositions[CardInArray(object.GetGUID())]
     if PlayerCheck(CardData["Color"],CardData["GUID"]) == true then
-        take(focus, CardData["ShipGUID"],-0.37,1,-0.37,false,0,0)
+        take(focus.getGUID(), CardData["ShipGUID"],-0.37,1,-0.37,false,0,0)
         notify(CardData["ShipGUID"],'action','takes a focus token')
     end
 end
@@ -357,7 +367,7 @@ end
 function CardStressButton(object)
     local CardData = dialpositions[CardInArray(object.GetGUID())]
     if PlayerCheck(CardData["Color"],CardData["GUID"]) == true then
-        take(stress, CardData["ShipGUID"],0.37,1,0.37,false,0,0)
+        take(stress.getGUID(), CardData["ShipGUID"],0.37,1,0.37,false,0,0)
         notify(CardData["ShipGUID"],'action','takes stress')
     end
 end
@@ -365,7 +375,7 @@ end
 function CardEvadeButton(object)
     local CardData = dialpositions[CardInArray(object.GetGUID())]
     if PlayerCheck(CardData["Color"],CardData["GUID"]) == true then
-        take(evade, CardData["ShipGUID"],-0.37,1,0.37,false,0,0)
+        take(evade.getGUID(), CardData["ShipGUID"],-0.37,1,0.37,false,0,0)
         notify(CardData["ShipGUID"],'action','takes an evade token')
     end
 end
@@ -2227,11 +2237,11 @@ function Action_TargetLock(object)
     end
 end
 function Action_Focus(object)
-    take(focus, object.getGUID(),-0.37,1,-0.37)
+    take(focus.getGUID(), object.getGUID(),-0.37,1,-0.37)
     notify(object.getGUID(),'action','takes a focus token')
 end
 function Action_Evade(object)
-    take(evade, object.getGUID(),-0.37,1,0.37)
+    take(evade.getGUID(), object.getGUID(),-0.37,1,0.37)
     notify(object.getGUID(),'action','takes an evade token')
 end
 
