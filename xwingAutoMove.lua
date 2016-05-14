@@ -19,6 +19,7 @@ focus = 'beca0f'
 evade = '4a352e'
 stress = 'a25e12'
 target = '5bd82a'
+enemy_target_locks = nil
 
 -- AI
 aitype = {}
@@ -64,6 +65,7 @@ function onload()
     end
     turn_marker = findObjectByName("Turn Marker")
     end_marker = findObjectByName("End Marker")
+    enemy_target_locks = findObjectByName("Enemy Target Locks")
 end
 function findObjectByName(name)
     for i,obj in ipairs(getAllObjects()) do
@@ -695,7 +697,19 @@ function check(guid,move)
         printToAll('AI Type For: ' .. ship.getName() .. ' set to ATTACK',{0, 1, 0})
         setpending(guid)
     end
-    if move == 'ai striketarget' then
+    if move:match 'ai flee (%a)' then
+        local direction = string.lower(move:match 'ai flee (%a)')
+        if contains({'e','s','n','w'},direction) then
+            aitype[guid] = 'flee_'..direction
+            local ship = getObjectFromGUID(guid)
+            printToAll('AI Type For: ' .. ship.getName() .. ' set to FLEE',{0, 1, 0})
+        else
+            printToAll("'"..direction.."' is invalid direction for AI FLEE command {E, S, W, N}",{1, 0, 0})
+        end
+        setpending(guid)
+    end
+    if move == 'ai striketarget' or
+       move == 'ai target' then
         striketarget = guid
         local ship = getObjectFromGUID(guid)
         printToAll('Strike Target Set: ' .. ship.getName(),{0.2, 0.2, 0.8})
@@ -1122,27 +1136,47 @@ function auto(guid)
         printToAll('Error: AI ' .. ai.getName() .. ' has no target',{0.2, 0.2, 0.8})
         setpending(guid)
     else
-        -- local tgt = getObjectFromGUID(tgtGuid)
-        -- aitargets[guid] = tgt
-        -- printToAll("--------------------------------------------------",{0,1,0})
-        -- printToAll(ai.getName().." declares target as [00FF00][u]" .. tgt.getName().."[/u][-]",{0,1,0})
-        local aiPos = ai.getPosition()
-        local tgtPos = tgt.getPosition()
-        local aiForward = getForwardVector(guid)
-        local tgtForward = getForwardVector(tgt.getGUID())
-        local offset = {tgtPos[1] - aiPos[1],0,tgtPos[3] - aiPos[3]}
-        local angle = math.atan2(offset[3], offset[1]) - math.atan2(aiForward[3], aiForward[1])
-        if angle < 0 then
-            angle = angle + 2 * math.pi
-        end
-        local fleeing = dot(offset,tgtForward)>0
-        local move = getMove(getAiType(ai),angle,realDistance(guid,tgt.getGUID()),fleeing)
-        if squad ~= nil then
-            -- printToAll("Setting move for squad [".. squad.."] ".. move,{1,0,0})
-            squadleader[squad] = guid
-            squadmove[squad] = move
-            squadposition[squad] = aiPos
-            squadrotation[squad] = ai.getRotation()[2]
+        local move
+        if aitype[guid]~=nil and aitype[guid]:match 'flee_(%a)' then
+                local direction = string.lower(aitype[guid]:match 'flee_(%a)')
+                local offsets = {
+                    e = {12,0,0},
+                    s = {0, 0, -12},
+                    w = {-12, 0, 0},
+                    n = {0, 0, 12}
+                }
+                local aiPos = ai.getPosition()
+                local aiForward = getForwardVector(guid)
+                local tgtPos = add(ai.getPosition(), offsets[direction])
+                local offset = {tgtPos[1] - aiPos[1],0,tgtPos[3] - aiPos[3]}
+                local angle = math.atan2(offset[3], offset[1]) - math.atan2(aiForward[3], aiForward[1])
+                if angle < 0 then
+                    angle = angle + 2 * math.pi
+                end
+                move = getMove(getAiType(ai),angle,12,true,true)
+        else
+            -- local tgt = getObjectFromGUID(tgtGuid)
+            -- aitargets[guid] = tgt
+            -- printToAll("--------------------------------------------------",{0,1,0})
+            -- printToAll(ai.getName().." declares target as [00FF00][u]" .. tgt.getName().."[/u][-]",{0,1,0})
+            local aiPos = ai.getPosition()
+            local tgtPos = tgt.getPosition()
+            local aiForward = getForwardVector(guid)
+            local tgtForward = getForwardVector(tgt.getGUID())
+            local offset = {tgtPos[1] - aiPos[1],0,tgtPos[3] - aiPos[3]}
+            local angle = math.atan2(offset[3], offset[1]) - math.atan2(aiForward[3], aiForward[1])
+            if angle < 0 then
+                angle = angle + 2 * math.pi
+            end
+            local fleeing = dot(offset,tgtForward)>0
+            move = getMove(getAiType(ai),angle,realDistance(guid,tgt.getGUID()),fleeing)
+            if squad ~= nil and squadmove[squad]==nil then
+                -- printToAll("Setting move for squad [".. squad.."] ".. move,{1,0,0})
+                squadleader[squad] = guid
+                squadmove[squad] = move
+                squadposition[squad] = aiPos
+                squadrotation[squad] = ai.getRotation()[2]
+            end
         end
         executeMove(ai, move)
         Render_SwerveLeft(ai,move)
@@ -1170,7 +1204,7 @@ function findAiTarget(guid)
     end
 end
 
-function AiSquadButton(ai)
+function Action_AiSquad(ai)
     local squad = getAiSquad(ai)
     if squad == nil then
         printToAll("No squad name found (Must be in format '[AI:INT:1] Tie Interceptor Alpha#1')",{1,0,0})
@@ -1180,28 +1214,15 @@ function AiSquadButton(ai)
     if squad ~=nil and squadmove[squad] ~= nil then
         -- printToAll("Found previous move for [".. squad.."] ".. squadmove[squad],{1,0,0})
         executeMove(ai, squadmove[squad])
-        State_AIPostMove(ai)
+        Render_SwerveLeft(ai,move)
+        Render_SwerveRight(ai,move)
         aitargets[ai.getGUID()] = aitargets[squadleader[squad]]
     else
         printToAll("No Squad Move Found for ".. squad,{1,0,0})
         setpending(ai.getGUID())
         return
     end
-    local next = FindNextAi(ai.getGUID(),MoveSort)
-
-    if next ~=nil then
-        State_AIMove(next)
-        UpdateNote(MoveSort, next.getGUID())
-    else
-        UpdateNote(MoveSort, nil, true)
-    end
-    for i,ship in ipairs(getAllObjects()) do
-        if isAi(ship) and ship.getGUID()~=ai.getGUID() then
-            if next==nil or ship.getGUID()~=next.getGUID() then
-                ship.clearButtons()
-            end
-        end
-    end
+    GoToNextMove(ai)
 end
 function executeMove(ai, move)
     if aiswerved[ai.getGUID()]~=true then
@@ -1247,15 +1268,16 @@ function Action_SwerveRight(object)
     object.setDescription("q "..swerves[2])
 end
 
-function getMove(type, direction,range,fleeing)
+function getMove(type, direction,range,far, flee)
     local i_dir = math.ceil(direction / (math.pi/4) + 0.5)
     if i_dir > 8 then i_dir = i_dir - 8 end
     local i_range = range / 3.7
-    local chooseClosing = i_range<=1 or (i_range <=2 and not fleeing)
+    local chooseClosing = i_range<=1 or (i_range <=2 and not far)
     local i_roll = math.random(6)
 
     local closeMoves = {}
     local farMoves = {}
+    local fleeMoves = {}
     if type == "TIE" then
         closeMoves[1] = {'bl2','br2','s2','s2','k4*','k4*'}
         closeMoves[2] = {'s2','bl2','bl2','k4*','k4*','tl1'}
@@ -1274,6 +1296,17 @@ function getMove(type, direction,range,fleeing)
         farMoves[6] = {'k4*','k3*','k3*','tr2','tr2','tr1'}
         farMoves[7] = {'br3','tr3','br2','tr2','tr2','tr1'}
         farMoves[8] = {'s3','br2','br3','br3','br3','tr3' }
+
+        fleeMoves['tl1'] = 'tl3'
+        fleeMoves['tl2'] = 'tl3'
+        fleeMoves['bl2'] = 'bl3'
+        fleeMoves['s2'] = 's5'
+        fleeMoves['s3'] = 's5'
+        fleeMoves['s4'] = 's5'
+        fleeMoves['br2'] = 'br3'
+        fleeMoves['tr2'] = 'tr3'
+        fleeMoves['tr1'] = 'tr3'
+        fleeMoves['k4*'] = 'k3*'
     end
     if type == "INT" then
         closeMoves[1] = {'bl2','br2','s2','s2','k5*','k5*'}
@@ -1293,6 +1326,17 @@ function getMove(type, direction,range,fleeing)
         farMoves[6] = {'k5*','k3*','k3*','tr2','tr2','tr1'}
         farMoves[7] = {'br3','tr3','br2','tr2','tr2','tr1'}
         farMoves[8] = {'s3','br2','br3','br3','br3','tr3' }
+
+        fleeMoves['tl1'] = 'tl3'
+        fleeMoves['tl2'] = 'tl3'
+        fleeMoves['bl2'] = 'bl3'
+        fleeMoves['s2'] = 's5'
+        fleeMoves['s3'] = 's5'
+        fleeMoves['s4'] = 's5'
+        fleeMoves['br2'] = 'br3'
+        fleeMoves['tr2'] = 'tr3'
+        fleeMoves['tr1'] = 'tr3'
+        fleeMoves['k5*'] = 'k3*'
     end
     if type == "ADV" then
         closeMoves[1] = {'bl1','br1','s2','s2','k4*','k4*'}
@@ -1312,6 +1356,16 @@ function getMove(type, direction,range,fleeing)
         farMoves[6] = {'k4*','k4*','k4*','tr2','tr2','tr2'}
         farMoves[7] = {'br1','br2','tr2','tr2','tr3','tr3'}
         farMoves[8] = {'s3','br2','br3','br3','br3','tr3' }
+
+        fleeMoves['tl2'] = 'tl3'
+        fleeMoves['bl1'] = 'bl3'
+        fleeMoves['bl2'] = 'bl3'
+        fleeMoves['s2'] = 's5'
+        fleeMoves['s3'] = 's5'
+        fleeMoves['s4'] = 's5'
+        fleeMoves['br1'] = 'br3'
+        fleeMoves['br2'] = 'br3'
+        fleeMoves['tr2'] = 'tr3'
     end
     if type == "BOM" then
         closeMoves[1] = {'bl1','br1','s1','s1','s1','k5*'}
@@ -1331,6 +1385,16 @@ function getMove(type, direction,range,fleeing)
         farMoves[6] = {'k5*','k5*','tr2*','tr2*','tr3','tr3'}
         farMoves[7] = {'br3','tr2*','tr2*','tr3','tr3','tr3'}
         farMoves[8] = {'s2','br2','br3','br3','br3','tr3' }
+
+        fleeMoves['tl2*'] = 'tl3'
+        fleeMoves['bl1'] = 'bl3'
+        fleeMoves['bl2'] = 'bl3'
+        fleeMoves['s1'] = 's4'
+        fleeMoves['s2'] = 's4'
+        fleeMoves['s3'] = 's4'
+        fleeMoves['br1'] = 'br3'
+        fleeMoves['br2'] = 'br3'
+        fleeMoves['tr2*'] = 'tr3'
     end
     if type == "DEF" then
         closeMoves[1] = {'bl1','br1','s2','s2','k4','k4'}
@@ -1350,6 +1414,18 @@ function getMove(type, direction,range,fleeing)
         farMoves[6] = {'k4','k4','k4','tr2*','tr2*','tr1*'}
         farMoves[7] = {'br1','br2','tr2*','tr3','tr3','tr3'}
         farMoves[8] = {'s3','br2','br3','br3','br3','tr3' }
+
+        fleeMoves['tl1*'] = 'tl3'
+        fleeMoves['tl2*'] = 'tl3'
+        fleeMoves['bl1'] = 'bl3'
+        fleeMoves['bl2'] = 'bl3'
+        fleeMoves['s2'] = 's5'
+        fleeMoves['s3'] = 's5'
+        fleeMoves['s4'] = 's5'
+        fleeMoves['br1'] = 'br3'
+        fleeMoves['br2'] = 'br3'
+        fleeMoves['tr1*'] = 'tr3'
+        fleeMoves['tr2*'] = 'tr3'
     end
     if type == "PHA" then
         closeMoves[1] = {'bl2','br2','s2','k4*','k4*','k4*'}
@@ -1369,6 +1445,16 @@ function getMove(type, direction,range,fleeing)
         farMoves[6] = {'k4*','k3*','k3*','tr2','tr2','tr1'}
         farMoves[7] = {'tr1','tr1','tr2','tr2','tr3','br2'}
         farMoves[8] = {'s3','br2','br3','br3','br3','tr3' }
+
+        fleeMoves['tl1'] = 'tl3'
+        fleeMoves['tl2'] = 'tl3'
+        fleeMoves['bl2'] = 'bl3'
+        fleeMoves['s2'] = 's4'
+        fleeMoves['s3'] = 's4'
+        fleeMoves['br2'] = 'br3'
+        fleeMoves['tr2'] = 'tr3'
+        fleeMoves['tr1'] = 'tr3'
+        fleeMoves['k4*'] = 'k3*'
     end
     if type == "DEC" then
         closeMoves[1] = {'s4','s4','bl3','br3','tl3','tr3'}
@@ -1388,6 +1474,17 @@ function getMove(type, direction,range,fleeing)
         farMoves[6] = {'tr2','tr2','tr2','tr3','tr3','br1'}
         farMoves[7] = {'br3','tr3','tr3','tr2','tr2','br1'}
         farMoves[8] = {'s4','br3','br3','br3','br2','tr3' }
+
+
+        fleeMoves['tl2'] = 'tl3'
+        fleeMoves['bl1'] = 'bl3'
+        fleeMoves['bl2'] = 'bl3'
+        fleeMoves['s1'] = 's4'
+        fleeMoves['s2'] = 's4'
+        fleeMoves['s3'] = 's4'
+        fleeMoves['br1'] = 'br3'
+        fleeMoves['br2'] = 'br3'
+        fleeMoves['tr2'] = 'tr3'
     end
     if type == "SHU" then
         closeMoves[1] = {'s0*','s0*','s0*','s1','br1','bl1'}
@@ -1407,13 +1504,27 @@ function getMove(type, direction,range,fleeing)
         farMoves[6] = {'tr2*','tr2*','tr2*','tr2*','br1','br1'}
         farMoves[7] = {'tr2*','tr2*','tr2*','tr2*','br2','br3*'}
         farMoves[8] = {'s2','br3*','br2','br2','br2','tr2*' }
+
+        fleeMoves['bl1'] = 'bl3*'
+        fleeMoves['bl2'] = 'bl3*'
+        fleeMoves['s1'] = 's3'
+        fleeMoves['s2'] = 's3'
+        fleeMoves['br1'] = 'br3*'
+        fleeMoves['br2'] = 'br3*'
     end
 
     local move = ""
-    if chooseClosing then
-        move = closeMoves[i_dir][i_roll]
-    else
+    if flee==true then
         move = farMoves[i_dir][i_roll]
+        if fleeMoves[move]~=nil then
+            move = fleeMoves[move]
+        end
+    else
+        if chooseClosing then
+            move = closeMoves[i_dir][i_roll]
+        else
+            move = farMoves[i_dir][i_roll]
+        end
     end
 
     return move
@@ -1625,7 +1736,8 @@ function getTotalTurns()
 end
 function isTemporary(object)
     local name = object.getName()
-    return (name=="Evade" or name=="Focus" or name=="Weapon Disabled" or name=="Reinforce") and object.getDescription()~="keep"
+    local desc = object.getDescription()
+    return (name=="Evade" or name=="Focus" or name=="Weapon Disabled" or name=="Reinforce" or desc=="Red TL") and desc~="keep"
 end
 function Render_AttackButton(object)
 
@@ -1756,6 +1868,12 @@ function prettyString(ship,withtarget)
         return "PS["..skill_color.."]"..skill.."[-] "..stripPS(ship.getName()).."" --,{0,0,1}
     end
 end
+function getSimpleAiName(ai)
+    local squad = getAiSquad(ai)
+    if squad == nil then squad = "" end
+    local number = tostring(getAiNumber(ai))
+    return squad.."#"..number
+end
 function stripPS(name)
     return string.gsub(name,"%[%d+%]%s*","")
 end
@@ -1831,10 +1949,14 @@ function State_AIMove(object)
     -- Set MOVE button
     local label = 'Move'
     if not isAi(object) then label = 'Next' end
+    if isAi(object) then
+        Render_AiFreeFocusEvade(object)
+        Render_AiFreeTargetLock(object)
+    end
     local movebutton = {['click_function'] = 'Action_AiMove', ['label'] = label, ['position'] = {0, 0.3, -0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 750, ['height'] = 550, ['font_size'] = 250}
     object.createButton(movebutton)
     if isAi(object) and getAiSquad(object)~=nil then
-        local squadbutton = {['click_function'] = 'AiSquadButton', ['label'] = 'Squad', ['position'] = {0, 0.3, 0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 750, ['height'] = 550, ['font_size'] = 250}
+        local squadbutton = {['click_function'] = 'Action_AiSquad', ['label'] = 'Squad', ['position'] = {0, 0.3, 0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 750, ['height'] = 550, ['font_size'] = 250}
         object.createButton(squadbutton)
     end
     --if getAiType(object) == "PHA" then
@@ -2004,13 +2126,30 @@ end
 
 function Render_BarrelRoll(object)
 
-    local xebbutton = {['click_function'] = 'Action_AiBarrelRollLeft', ['label'] = 'xl', ['position'] = {-1.6, 0.3, 0}, ['rotation'] =  {0, 0, 0}, ['width'] = 300, ['height'] = 300, ['font_size'] = 250}
-    object.createButton(xebbutton)
+    local xlbbutton = {['click_function'] = 'Action_AiBarrelRollLeftBack', ['label'] = 'xlb', ['position'] = {-1.6, 0.3, 0.8}, ['rotation'] =  {0, 0, 0}, ['width'] = 350, ['height'] = 300, ['font_size'] = 250}
+    object.createButton(xlbbutton)
 
-    local xrbbutton = {['click_function'] = 'Action_AiBarrelRollRight', ['label'] = 'xr', ['position'] = {1.6, 0.3, 0}, ['rotation'] =  {0, 0, 0}, ['width'] = 300, ['height'] = 300, ['font_size'] = 250}
+    local xlbutton = {['click_function'] = 'Action_AiBarrelRollLeft', ['label'] = 'xl', ['position'] = {-1.6, 0.3, 0}, ['rotation'] =  {0, 0, 0}, ['width'] = 350, ['height'] = 300, ['font_size'] = 250}
+    object.createButton(xlbutton)
+
+    local xlfbutton = {['click_function'] = 'Action_AiBarrelRollLeftFront', ['label'] = 'xlf', ['position'] = {-1.6, 0.3, -0.8}, ['rotation'] =  {0, 0, 0}, ['width'] = 350, ['height'] = 300, ['font_size'] = 250}
+    object.createButton(xlfbutton)
+
+    local xrbbutton = {['click_function'] = 'Action_AiBarrelRollRightBack', ['label'] = 'xrb', ['position'] = {1.6, 0.3, 0.8}, ['rotation'] =  {0, 0, 0}, ['width'] = 350, ['height'] = 300, ['font_size'] = 250}
     object.createButton(xrbbutton)
+    local xrbutton = {['click_function'] = 'Action_AiBarrelRollRight', ['label'] = 'xr', ['position'] = {1.6, 0.3, 0}, ['rotation'] =  {0, 0, 0}, ['width'] = 350, ['height'] = 300, ['font_size'] = 250}
+    object.createButton(xrbutton)
+    local xrfbutton = {['click_function'] = 'Action_AiBarrelRollRightFront', ['label'] = 'xrf', ['position'] = {1.6, 0.3, -0.8}, ['rotation'] =  {0, 0, 0}, ['width'] = 350, ['height'] = 300, ['font_size'] = 250}
+    object.createButton(xrfbutton)
 end
 
+function Action_AiBarrelRollLeftBack(object)
+    object.setDescription("xlb")
+    object.clearButtons()
+    Render_AiUndoBoostBarrel(object)
+    Render_Ruler(object)
+    Render_AiFocusEvade(object)
+end
 function Action_AiBarrelRollLeft(object)
     object.setDescription("xl")
     object.clearButtons()
@@ -2018,9 +2157,30 @@ function Action_AiBarrelRollLeft(object)
     Render_Ruler(object)
     Render_AiFocusEvade(object)
 end
+function Action_AiBarrelRollLeftFront(object)
+    object.setDescription("xlf")
+    object.clearButtons()
+    Render_AiUndoBoostBarrel(object)
+    Render_Ruler(object)
+    Render_AiFocusEvade(object)
+end
 
+function Action_AiBarrelRollRightBack(object)
+    object.setDescription("xrb")
+    object.clearButtons()
+    Render_AiUndoBoostBarrel(object)
+    Render_Ruler(object)
+    Render_AiFocusEvade(object)
+end
 function Action_AiBarrelRollRight(object)
     object.setDescription("xr")
+    object.clearButtons()
+    Render_AiUndoBoostBarrel(object)
+    Render_Ruler(object)
+    Render_AiFocusEvade(object)
+end
+function Action_AiBarrelRollRightFront(object)
+    object.setDescription("xrf")
     object.clearButtons()
     Render_AiUndoBoostBarrel(object)
     Render_Ruler(object)
@@ -2038,8 +2198,34 @@ function Render_AiFocusEvade(object)
         object.createButton(evadebutton)
     end
 end
+function Render_AiFreeFocusEvade(object)
+    local type = getAiType(object);
+    if type=="INT" then
+        local focusbutton = {['click_function'] = 'Action_Focus', ['label'] = 'F', ['position'] = {1.0, 0.3, -0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 250}
+        object.createButton(focusbutton)
+    end
+    if type=="PHA" then
+        local evadebutton = {['click_function'] = 'Action_Evade', ['label'] = 'E', ['position'] = {1.0, 0.3, 0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 250}
+        object.createButton(evadebutton)
+    end
+end
+function Render_AiFreeTargetLock(object)
+    local type = getAiType(object);
+    if type=="SHU" or type=="DEF" or type=="BOM" or type=="ADV" or type=="DEC" then
+        local tlbutton = {['click_function'] = 'Action_TargetLock', ['label'] = 'TL', ['position'] = {-1.2, 0.3, -0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 350, ['height'] = 530, ['font_size'] = 250}
+        object.createButton(tlbutton)
+    end
+end
 
-
+function Action_TargetLock(object)
+    local target = findAiTarget(object.getGUID())
+    if target~=nil then
+        take(enemy_target_locks.getGUID(), target.getGUID(),0.37,1,-0.37,true,"Red",getSimpleAiName(object))
+        notify(object.getGUID(),'action','acquires a target lock')
+    else
+        notify(object.getGUID(),'action','has no target')
+    end
+end
 function Action_Focus(object)
     take(focus, object.getGUID(),-0.37,1,-0.37)
     notify(object.getGUID(),'action','takes a focus token')
