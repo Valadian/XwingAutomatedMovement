@@ -31,6 +31,7 @@ squadposition = {}
 squadrotation = {}
 aimove = {}
 aiswerved = {}
+airollboosted = {}
 aitargets = {}
 aistressed = {}
 aidecloaked = {}
@@ -1012,6 +1013,7 @@ end
 function ruler(guid,action)
 
     local shipobject = getObjectFromGUID(guid)
+    shipobject.clearButtons()
     local shipname = shipobject.getName()
     local direction = shipobject.getRotation()
     local world = shipobject.getPosition()
@@ -1051,6 +1053,8 @@ end
 
 function actionButton(object)
     object.destruct()
+    local ship = findNearestShip(object.getPosition())
+    Render_ButtonState(ship)
 end
 
 function straight(guid,forwardDistance,bsfd)
@@ -1193,8 +1197,7 @@ function auto(guid)
             end
         end
         executeMove(ai, move)
-        Render_SwerveLeft(ai,move)
-        Render_SwerveRight(ai,move)
+        Render_Swerves(ai)
     end
 end
 function findAiTarget(guid)
@@ -1228,8 +1231,7 @@ function Action_AiSquad(ai)
     if squad ~=nil and squadmove[squad] ~= nil then
         -- printToAll("Found previous move for [".. squad.."] ".. squadmove[squad],{1,0,0})
         executeMove(ai, squadmove[squad])
-        Render_SwerveLeft(ai,move)
-        Render_SwerveRight(ai,move)
+        Render_Swerves(ai)
         aitargets[ai.getGUID()] = aitargets[squadleader[squad]]
     else
         printToAll("No Squad Move Found for ".. squad,{1,0,0})
@@ -1251,12 +1253,61 @@ function executeMove(ai, move)
 --        printToAll('[STRESS - No Action]',{1, 0, 0})
     end
 end
+function Render_ButtonState(object)
+    if isAi(object) then
+        object.clearButtons()
+        if aimove[object.getGUID()]~=nil then
+            Render_Undo(object)
+
+            Render_AiFocusEvade(object)
+
+            Render_Ruler(object)
+            if airollboosted[object.getGUID()]~=true then
+                Render_Swerves(object)
+                if getAiHasBoost(object) then
+                    Render_Boost(object)
+                end
+
+                if getAiHasBarrelRoll(object) then
+                    Render_BarrelRoll(object)
+                end
+            end
+        else
+            local label = 'Move'
+            if not isAi(object) then label = 'Next' end
+            if isAi(object) then
+                Render_AiFreeFocusEvade(object)
+                Render_AiFreeTargetLock(object)
+            end
+            local movebutton = {['click_function'] = 'Action_AiMove', ['label'] = label, ['position'] = {0, 0.3, -0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 750, ['height'] = 550, ['font_size'] = 250}
+            object.createButton(movebutton)
+            if isAi(object) and getAiSquad(object)~=nil and squadmove[getAiSquad(object)]~=nil then
+                local squadbutton = {['click_function'] = 'Action_AiSquad', ['label'] = 'Squad', ['position'] = {0, 0.3, 0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 750, ['height'] = 550, ['font_size'] = 250}
+                object.createButton(squadbutton)
+            end
+        end
+    end
+end
+function Render_Swerves(object)
+    Render_SwerveLeft(object)
+    Render_NoSwerve(object)
+    Render_SwerveRight(object)
+end
+function Render_NoSwerve(object)
+    local move = aimove[object.getGUID()]
+    local noswerve = {['click_function'] = 'Action_NoSwerve', ['label'] = move, ['position'] = {0, 0.3, 1.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 450, ['height'] = 300, ['font_size'] = 300}
+    object.createButton(noswerve)
+end
+function Action_NoSwerve(object)
+    local move = aimove[object.getGUID()]
+    object.setDescription("q "..move)
+end
 function Render_SwerveLeft(object)
     local move = aimove[object.getGUID()]
 
     local swerves = getSwerve(getAiType(object),move)
-    if swerves ~= nil and swerves[1] ~= nil and aiswerved[object.getGUID()]~=true then
-        local swerve = {['click_function'] = 'Action_SwerveLeft', ['label'] = swerves[1], ['position'] = {-0.6, 0.3, 1.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 400, ['height'] = 300, ['font_size'] = 300}
+    if swerves ~= nil and swerves[1] ~= nil then -- and aiswerved[object.getGUID()]~=true
+        local swerve = {['click_function'] = 'Action_SwerveLeft', ['label'] = swerves[1], ['position'] = {-1.0, 0.3, 1.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 450, ['height'] = 300, ['font_size'] = 300}
         object.createButton(swerve)
     end
 end
@@ -1270,8 +1321,8 @@ function Render_SwerveRight(object)
     local move = aimove[object.getGUID()]
 
     local swerves = getSwerve(getAiType(object),move)
-    if swerves ~= nil and swerves[2] ~= nil and aiswerved[object.getGUID()]~=true then
-        local swerve = {['click_function'] = 'Action_SwerveRight', ['label'] = swerves[2], ['position'] = {0.6, 0.3, 1.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 400, ['height'] = 300, ['font_size'] = 300}
+    if swerves ~= nil and swerves[2] ~= nil then -- and aiswerved[object.getGUID()]~=true
+        local swerve = {['click_function'] = 'Action_SwerveRight', ['label'] = swerves[2], ['position'] = {1.0, 0.3, 1.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 450, ['height'] = 300, ['font_size'] = 300}
         object.createButton(swerve)
     end
 end
@@ -1790,7 +1841,7 @@ function UpdateNote(sort, next,complete)
     local ais = {}
     local showPlayers = true
     for i,ship in ipairs(getAllObjects()) do
-        if isInPlay(ship) and (isAi(ship) or isShip(ship)  and showPlayers and getSkill(ship)~=nil) then
+        if isInPlay(ship) and (isAi(ship) or (isShip(ship)  and showPlayers)) and getSkill(ship)~=nil then
             table.insert(ais, ship)
         end
     end -- [end loop for all ships]
@@ -2079,7 +2130,7 @@ function Action_AiUndoBoostBarrel(object)
 
     object.clearButtons()
     object.setDescription("q")
-
+    airollboosted[object.getGUID()]=nil
     Render_Ruler(object)
 
     if getAiHasBoost(object) then
@@ -2131,6 +2182,7 @@ end
 function Action_AiBoostLeft(object)
     object.setDescription("bl1")
     object.clearButtons()
+    airollboosted[object.getGUID()]=true
     Render_AiUndoBoostBarrel(object)
     Render_Ruler(object)
     Render_AiFocusEvade(object)
@@ -2139,6 +2191,7 @@ end
 function Action_AiBoostStraight(object)
     object.setDescription("s1")
     object.clearButtons()
+    airollboosted[object.getGUID()]=true
     Render_AiUndoBoostBarrel(object)
     Render_Ruler(object)
     Render_AiFocusEvade(object)
@@ -2147,6 +2200,7 @@ end
 function Action_AiBoostRight(object)
     object.setDescription("br1")
     object.clearButtons()
+    airollboosted[object.getGUID()]=true
     Render_AiUndoBoostBarrel(object)
     Render_Ruler(object)
     Render_AiFocusEvade(object)
@@ -2174,6 +2228,7 @@ end
 function Action_AiBarrelRollLeftBack(object)
     object.setDescription("xlb")
     object.clearButtons()
+    airollboosted[object.getGUID()]=true
     Render_AiUndoBoostBarrel(object)
     Render_Ruler(object)
     Render_AiFocusEvade(object)
@@ -2181,6 +2236,7 @@ end
 function Action_AiBarrelRollLeft(object)
     object.setDescription("xl")
     object.clearButtons()
+    airollboosted[object.getGUID()]=true
     Render_AiUndoBoostBarrel(object)
     Render_Ruler(object)
     Render_AiFocusEvade(object)
@@ -2188,6 +2244,7 @@ end
 function Action_AiBarrelRollLeftFront(object)
     object.setDescription("xlf")
     object.clearButtons()
+    airollboosted[object.getGUID()]=true
     Render_AiUndoBoostBarrel(object)
     Render_Ruler(object)
     Render_AiFocusEvade(object)
@@ -2196,6 +2253,7 @@ end
 function Action_AiBarrelRollRightBack(object)
     object.setDescription("xrb")
     object.clearButtons()
+    airollboosted[object.getGUID()]=true
     Render_AiUndoBoostBarrel(object)
     Render_Ruler(object)
     Render_AiFocusEvade(object)
@@ -2203,6 +2261,7 @@ end
 function Action_AiBarrelRollRight(object)
     object.setDescription("xr")
     object.clearButtons()
+    airollboosted[object.getGUID()]=true
     Render_AiUndoBoostBarrel(object)
     Render_Ruler(object)
     Render_AiFocusEvade(object)
@@ -2210,6 +2269,7 @@ end
 function Action_AiBarrelRollRightFront(object)
     object.setDescription("xrf")
     object.clearButtons()
+    airollboosted[object.getGUID()]=true
     Render_AiUndoBoostBarrel(object)
     Render_Ruler(object)
     Render_AiFocusEvade(object)
@@ -2241,6 +2301,8 @@ function Render_AiFreeTargetLock(object)
     local type = getAiType(object);
     if type=="SHU" or type=="DEF" or type=="BOM" or type=="ADV" or type=="DEC" then
         local tlbutton = {['click_function'] = 'Action_TargetLock', ['label'] = 'TL', ['position'] = {-1.2, 0.3, -0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 350, ['height'] = 530, ['font_size'] = 250}
+        object.createButton(tlbutton)
+        local tlbutton = {['click_function'] = 'RulerButton', ['label'] = 'R', ['position'] = {1.2, 0.3, -0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 350, ['height'] = 530, ['font_size'] = 250}
         object.createButton(tlbutton)
     end
 end
@@ -2276,7 +2338,20 @@ end
 function dot(a,b)
     return a[3]*b[3] + a[1]*b[1]
 end
-
+function findNearestShip(pos)
+    local nearest
+    local minDist = 999999
+    for i,ship in ipairs(getAllObjects()) do
+        if isShip(ship) then
+            local distance = distance(pos[1],pos[3],ship.getPosition()[1],ship.getPosition()[3])
+            if distance<minDist then
+                minDist = distance
+                nearest = ship
+            end
+        end
+    end
+    return nearest
+end
 function findNearestPlayer(guid)
     local ai  = getObjectFromGUID(guid)
     local inarc = getAiType(ai) ~= "DEC"
