@@ -1254,39 +1254,44 @@ function executeMove(ai, move)
     end
 end
 function Render_ButtonState(object)
-    if isAi(object) then
-        object.clearButtons()
-        if aimove[object.getGUID()]~=nil then
-            Render_Undo(object)
+    if currentphase == MoveSort then
+        if isAi(object) then
+            object.clearButtons()
+            if aimove[object.getGUID()]~=nil then
+                Render_Undo(object)
 
-            Render_AiFocusEvade(object)
+                Render_AiFocusEvade(object)
 
-            Render_Ruler(object)
-            if airollboosted[object.getGUID()]~=true then
-                Render_Swerves(object)
-                if getAiHasBoost(object) then
-                    Render_Boost(object)
+                Render_Ruler(object)
+                if airollboosted[object.getGUID()]~=true then
+                    Render_Swerves(object)
+                    if getAiHasBoost(object) then
+                        Render_Boost(object)
+                    end
+
+                    if getAiHasBarrelRoll(object) then
+                        Render_BarrelRoll(object)
+                    end
                 end
-
-                if getAiHasBarrelRoll(object) then
-                    Render_BarrelRoll(object)
+            else
+                local label = 'Move'
+                if not isAi(object) then label = 'Next' end
+                if isAi(object) then
+                    Render_AiFreeFocusEvade(object)
+                    Render_AiFreeTargetLock(object)
+                end
+                local movebutton = {['click_function'] = 'Action_AiMove', ['label'] = label, ['position'] = {0, 0.3, -0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 750, ['height'] = 550, ['font_size'] = 250}
+                object.createButton(movebutton)
+                if isAi(object) and getAiSquad(object)~=nil and squadmove[getAiSquad(object)]~=nil then
+                    local squadbutton = {['click_function'] = 'Action_AiSquad', ['label'] = 'Squad', ['position'] = {0, 0.3, 0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 750, ['height'] = 550, ['font_size'] = 250}
+                    object.createButton(squadbutton)
                 end
             end
-        else
-            local label = 'Move'
-            if not isAi(object) then label = 'Next' end
-            if isAi(object) then
-                Render_AiFreeFocusEvade(object)
-                Render_AiFreeTargetLock(object)
-            end
-            local movebutton = {['click_function'] = 'Action_AiMove', ['label'] = label, ['position'] = {0, 0.3, -0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 750, ['height'] = 550, ['font_size'] = 250}
-            object.createButton(movebutton)
-            if isAi(object) and getAiSquad(object)~=nil and squadmove[getAiSquad(object)]~=nil then
-                local squadbutton = {['click_function'] = 'Action_AiSquad', ['label'] = 'Squad', ['position'] = {0, 0.3, 0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 750, ['height'] = 550, ['font_size'] = 250}
-                object.createButton(squadbutton)
-            end
+        elseif object==current then
+            State_AIMove(object)
         end
     end
+    --TODO Add Attack button states
 end
 function Render_Swerves(object)
     Render_SwerveLeft(object)
