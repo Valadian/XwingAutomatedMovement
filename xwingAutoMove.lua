@@ -734,7 +734,7 @@ function check(guid,move)
             local players = {}
             for i,ship in ipairs(getAllObjects()) do
                 local matches = string.match(ship.getName(),target)
-                if not isAi(ship) and isShip(ship) and matches then
+4                if not isAi(ship) and isShip(ship) and isInPlay(ship) and matches then
                     table.insert(players, ship)
                 end
             end
@@ -755,8 +755,12 @@ function check(guid,move)
         printToAll('Position '..ship.getPosition()[1].." "..ship.getPosition()[2].." "..ship.getPosition()[3],{0,1,0})
     end
     if move == "ai next" then
-        local ship = getObjectFromGUID(guid)
-        GoToNextMove(ship)
+        if currentphase == MoveSort then
+            local ship = getObjectFromGUID(guid)
+            GoToNextMove(ship)
+        elseif currentphase == AttackSort then
+            Action_AiAttack(ship)
+        end
         setpending(guid)
     end
     if move == "ai stress true" or move == "ai stress" then
@@ -1653,7 +1657,7 @@ function Action_MovePhase()
     aistressed = {}
     -- ListAis(MoveSort)
     for i,ship in ipairs(getAllObjects()) do
-        if isShip(ship) then
+        if isShip(ship) and isInPlay(ship) then
             ship.clearButtons()
             if getAiType(ship)=="PHA" then
                 Render_AiDecloak(ship)
@@ -1683,7 +1687,7 @@ function Action_AttackPhase()
     -- printToAll("STARTING COMBAT PHASE",{0,1,1})
     -- printToAll("**************************",{0,1,1})
     currentphase = AttackSort
-    UpdateNote(AttackSort, nil)
+    --UpdateNote(AttackSort, nil)
     -- ListAis(AttackSort)
     for i,ship in ipairs(getAllObjects()) do
         if isShip(ship) then
@@ -1691,14 +1695,16 @@ function Action_AttackPhase()
             -- Render_Ruler(ship)
         end
     end -- [end loop for all ships]
-    local first = FindNextAi(nil, AttackSort)
-    current = first
-    if first ~=nil then
-        Render_Ruler(first)
-        Render_AttackButton(first)
-    end
+    Action_AiAttack(nil)
 end
-
+--function GoToNextAttack(ship)
+--    local first = FindNextAi(ship, AttackSort)
+--    current = first
+--    if first ~=nil then
+--        Render_Ruler(first)
+--        Render_AttackButton(first)
+--    end
+--end
 
 function Action_EndPhase()
     for i,obj in ipairs(getAllObjects()) do
@@ -1755,8 +1761,12 @@ function Render_AttackButton(object)
     object.createButton(attackbutton)
 end
 function Action_AiAttack(object)
-    object.clearButtons()
-    local next = FindNextAi(object.getGUID(),AttackSort)
+    local guid
+    if object~=nil then
+        object.clearButtons()
+        guid = object.getGUID()
+    end
+    local next = FindNextAi(guid,AttackSort)
     current = next
     if next ~=nil then
         Render_Ruler(next)
@@ -1780,7 +1790,7 @@ function UpdateNote(sort, next,complete)
     local ais = {}
     local showPlayers = true
     for i,ship in ipairs(getAllObjects()) do
-        if (isAi(ship) or isShip(ship) and showPlayers and getSkill(ship)~=nil) then
+        if (isInPlay(ship) and (isAi(ship) or isShip(ship)  and showPlayers and getSkill(ship)~=nil)) then
             table.insert(ais, ship)
         end
     end -- [end loop for all ships]
@@ -1805,7 +1815,7 @@ function UpdatePlanningNote()
     if currentphase == PlanningSort then
         local ai_string = "*** [FF80FF]Planning Phase - Turn "..tostring(getTurnNumber()).."/"..tostring(getTotalTurns()).."[-] ***"
         for i,ship in ipairs(getAllObjects()) do
-            if isShip(ship) and not isAi(ship) then
+            if isShip(ship) and isInPlay(ship) and not isAi(ship) then
                 local status = "Waiting"
                 local statuscolor = "FF0000"
                 local found = ship.getVar('HasDial')
@@ -1831,7 +1841,7 @@ function ListAis(sort)
     local ais = {}
     local showPlayers = true
     for i,ship in ipairs(getAllObjects()) do
-        if (isAi(ship) or isShip(ship) and showPlayers and getSkill(ship)~=nil) then
+        if (isAi(ship) or isShip(ship) and isInPlay(ship) and showPlayers and getSkill(ship)~=nil) then
             table.insert(ais, ship)
         end
     end -- [end loop for all ships]
@@ -1893,30 +1903,38 @@ end
 function FindNextAi(guid, sort)
     local ais = {}
     for i,ship in ipairs(getAllObjects()) do
-        if isShip(ship) then
+        if isShip(ship) and isInPlay(ship) then
             table.insert(ais, ship)
         end
     end -- [end loop for all ships]
---    for i,ship in ipairs(ais) do
---        printToAll(ship.getName().." - "..getSkill(ship.getName()).." - "..getAiNumber(ship.getName()),{0,1,0})
---    end
-    table.sort(ais,sort)
---    if guid==nil then
---        return ais[1]
---    else
-        local selffound = false
-        for i,ship in ipairs(ais) do
-            if selffound or guid==nil then
-                if isAi(ship) then
-                    return ship
-                else
-                    table.insert(players_up_next,ship)
-                    return ship
-                end
-            end
-            if ship.getGUID()==guid then selffound = true end
+    if guid~=nil then
+        local ai = getObjectFromGUID(guid)
+        if ai~=nil and not contains(ais, ai) then
+            table.insert(ais, ai)
+            printToAll("Added self",{0,1,0})
         end
---    end
+    end
+    table.sort(ais,sort)
+    for i,ship in ipairs(ais) do
+        printToAll("Searching "..prettyString(ship),{1,1,1})
+    end
+    local selffound = false
+    for i,ship in ipairs(ais) do
+        if selffound or guid==nil then
+            if isAi(ship) then
+                printToAll("Found Next AI: "..prettyString(ship),{0,1,0})
+                return ship
+            else
+                printToAll("Found Next Player: "..prettyString(ship),{0,1,0})
+                table.insert(players_up_next,ship)
+                return ship
+            end
+        end
+        if ship.getGUID()==guid then
+            selffound = true
+            printToAll("Found Self: "..prettyString(ship),{0,1,0})
+        end
+    end
 end
 function AttackSort(a, b)
     local a_ps = tonumber(getSkill(a))
@@ -1965,7 +1983,7 @@ function State_AIMove(object)
     end
     local movebutton = {['click_function'] = 'Action_AiMove', ['label'] = label, ['position'] = {0, 0.3, -0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 750, ['height'] = 550, ['font_size'] = 250}
     object.createButton(movebutton)
-    if isAi(object) and getAiSquad(object)~=nil then
+    if isAi(object) and getAiSquad(object)~=nil and squadmove[getAiSquad(object)]~=nil then
         local squadbutton = {['click_function'] = 'Action_AiSquad', ['label'] = 'Squad', ['position'] = {0, 0.3, 0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 750, ['height'] = 550, ['font_size'] = 250}
         object.createButton(squadbutton)
     end
@@ -2266,7 +2284,7 @@ function findNearestPlayer(guid)
     local angles = {}
 
     for i,ship in ipairs(getAllObjects()) do
-        if isShip(ship) and not isAi(ship) then
+        if isShip(ship) and not isAi(ship) and isInPlay(ship) then
             local pos = ship.getPosition()
             -- log("Adding Target: "..ship.getName())
             distances[ship.getGUID()] = realDistance(guid,ship.getGUID())
@@ -2359,7 +2377,7 @@ function realDistance(guid1, guid2)
 end
 
 function isShip(ship)
-    return ship.tag == 'Figurine' and ship.name ~= '' and isInPlay(ship)
+    return ship.tag == 'Figurine' and ship.name ~= '' -- and isInPlay(ship)
 end
 
 function isAi(ai)
@@ -2410,6 +2428,15 @@ function contains(self, val)
 
     return false
 end
+--function containsByKey(self, val, key)
+--    for index, value in ipairs (self) do
+--        if value[key] == val[key] then
+--            return true
+--        end
+--    end
+--
+--    return false
+--end
 function empty (self)
     for _, _ in pairs(self) do
         return false
@@ -2429,7 +2456,7 @@ function log(string)
 end
 
 function onObjectEnterScriptingZone(zone, object)
-    if zone.getGUID() == missionzone and object.tag == 'Card' and object.getName():match '^Mission: (.*)' then
+    if zone.getGUID() == missionzone and object~=nil and object.tag == 'Card' and object.getName():match '^Mission: (.*)' then
         object.clearButtons()
         local offset = 0
         for i,num in ipairs({1,2,3,4,5,6}) do
@@ -2504,13 +2531,26 @@ COLLIDER = {
 shipnum = 1
 missionsquads = {}
 missionvectors = {}
+core_source = nil
+tfa_source = nil
+asteroid_min_x = -9.2
+asteroid_max_x = 9.2
+asteroid_min_y = -9.2
+asteroid_max_y = 9.2
+num_asteroids = 0
 function Action_setup(object)
     if mission_ps == nil or mission_players == nil then
         printToAll("Must select Number of players and Average Player Skill", {1,0,0})
     else
         local mission = object.getName():match '^Mission: (.*)'
-        squads = {}
+        local squads = {}
+        missionsquads = {}
         missionvectors = {}
+        decks = {}
+        cards = {}
+        shipnum = 1
+        local rule_page
+        local turns = 12
         if mission == "Local Trouble" then
             printToAll("Setting up: "..mission, {0,1,0})
             table.insert(missionsquads, {name="Alpha",turn=0,vector=3,ai="attack",type="TIE",count={1,1,0,1,0,1}, elite=false})
@@ -2523,26 +2563,99 @@ function Action_setup(object)
             table.insert(missionvectors, {x= 1.5, y= 4.5, rot=180})
             table.insert(missionvectors, {x= 4.5, y= 1.5, rot=-90})
             table.insert(missionvectors, {x= 4.5, y=-1.5, rot=-90})
+            turns = 10
+            num_asteroids = 6
+            rule_page = 46
         end
         if mission == "Rescue Rebel Operatives" then
 
         end
         if mission == "Test" then
-            shipnum = 1
-            Spawn_Squad(1,"TIE","Alpha",4, false)
-            Spawn_Squad(2,"INT","Beta",3, false)
-            Spawn_Squad(3,"ADV","Beta",2, false)
-            Spawn_Squad(4,"BOM","Gamma",1, false)
-            Spawn_Squad(5,"DEF","Gamma",3, false)
-            Spawn_Squad(6,"PHA","Gamma",4, false)
-            Spawn_Squad(7,"SHU","Gamma",1, false)
-            Spawn_Squad(8,"DEC","Gamma",1, false)
+--            shipnum = 1
+--            Spawn_Squad(1,"TIE","Alpha",4, false)
+--            Spawn_Squad(2,"INT","Beta",3, false)
+--            Spawn_Squad(3,"ADV","Beta",2, false)
+--            Spawn_Squad(4,"BOM","Gamma",1, false)
+--            Spawn_Squad(5,"DEF","Gamma",3, false)
+--            Spawn_Squad(6,"PHA","Gamma",4, false)
+--            Spawn_Squad(7,"SHU","Gamma",1, false)
+--            Spawn_Squad(8,"DEC","Gamma",1, false)
         end
 
         for i,squad in ipairs(missionsquads) do
             Spawn_Squad(squad)
         end
+        core_source = findObjectByNameAndType("Core Set Asteroids","Infinite")
+        tfa_source = findObjectByNameAndType("TFA Set Asteroids","Infinite")
+--        local rules1 = findObjectByName("Rules Page 1")
+--        rules1.setState(rule_page)
+--        local rules2 = findObjectByName("Rules Page 2")
+--        rules2.setState(rule_page+1)
+        startLuaCoroutine(nil, 'spawnAllAsteroidsCoroutine')
+        turn_marker.setPosition({turn_marker.getPosition()[1],turn_marker.getPosition()[2],13.3})
+        end_marker.setPosition({end_marker.getPosition()[1],end_marker.getPosition()[2],13.3-2.59*(turns-1)})
+        -- Spawn_Card(nil,nil,nil)
     end
+end
+function mod(a,b)
+    return a - math.floor(a/b)*b
+end
+function spawnAllAsteroidsCoroutine()
+    asteroids = {}
+    for i=1,num_asteroids,1 do
+        local i_roll = math.random(12)
+        local params = {}
+        --local x = asteroid_min_x + (asteroid_max_x - asteroid_min_x)*math.random()
+        --local y = asteroid_min_y + (asteroid_max_y - asteroid_min_y)*math.random()
+        params.position = findClearPosition()
+        params.rotation = {0,math.random(360),0}
+        params.callback = 'setAsteroidState'
+        params.callback_owner = Global
+        local callback_params = {}
+        local state = mod(i_roll-1,6)+1
+        callback_params['index'] = i
+        callback_params['state'] = state
+        params.params = callback_params
+        if i_roll<7 then
+            asteroids[i] = core_source.takeObject(params)
+        else
+            asteroids[i] = tfa_source.takeObject(params)
+        end
+        local type = "Core"
+        if i_roll>6 then type="TFA" end
+        printToAll("Spawned Asteroid ("..type.." "..state..") at {"..round(params.position[1],2)..",0,"..round(params.position[3],2).."}",{0,1,0})
+        for i=1, 20, 1 do
+            coroutine.yield(0)
+        end
+    end
+    return true
+end
+function findClearPosition()
+    local tries = 10
+    local pos
+    for i=1, tries, 1 do
+        local x = asteroid_min_x + (asteroid_max_x - asteroid_min_x)*math.random()
+        local y = asteroid_min_y + (asteroid_max_y - asteroid_min_y)*math.random()
+        pos = {x,0,y}
+        if isClear(pos) then
+            return pos
+        end
+    end
+    printToAll("Couldn't find clear area after 10 tries",{1,0,0})
+    return pos
+end
+function isClear(pos)
+    for i,asteroid in ipairs(getAllObjects()) do
+       if asteroid.getName():match "Asteroid.*" then
+           local astpos = asteroid.getPosition()
+           if distance(pos[1],pos[3],astpos[1],astpos[3])<5.5 then return false end
+       end
+    end
+    return true
+end
+function setAsteroidState(object, params)
+    asteroids[params['index']].setState( params['state'] )
+    -- printToAll("Setting '"..asteroids[params['index']].getGUID().."' to state '"..params['state'].."'",{0,1,0})
 end
 PS =  {
     TIE = {1, nil, nil, nil, nil},
@@ -2591,10 +2704,47 @@ function countSquad(squad)
     end
     return number
 end
+--INT 6
+--BOM 6
+--ADV 4
+--DEF 4
+--PHA 4
+--SHU 4
 function add(pos, offset)
     return {pos[1] + offset[1],pos[2] + offset[2],pos[3] + offset[3]}
 end
-
+pilot_card_offsets = {TIE=0,INT=1,BOM=7,ADV=13, DEF=17, PHA=21, SHU=25 }
+pilot_card_num = {TIE=1,INT=6,BOM=6,ADV=4,DEF=4,PHA=4,SHU=4}
+decks = {}
+cards = {}
+function Spawn_Card(type, name, position, shipnum)
+    local pilots = findObjectByNameAndType("Imperial Pilots","Infinite")
+    local params = {}
+    -- params.position = pilots.getPosition()
+    -- params.position[1] = params.position[1]+5
+    -- params.position[2] = 5
+    params.position = {22,5,19.2 }
+    params.callback = 'drawCard'
+    params.callback_owner = Global
+    local index = pilot_card_offsets[type]+math.random(pilot_card_num[type])-1
+    printToAll("Drawing card "..index,{0,1,0})
+    params.params = {index = index, shipnum = shipnum, name = name, position = position }
+    decks[shipnum] = pilots.takeObject(params)
+end
+function drawCard(object, params)
+    local p = {}
+    p.position = add(params.position,{5,3,0}) --{22,5,14 }
+    p.index = params.index
+    p.callback = 'updateCard'
+    p.callback_owner = Global
+    p.params = params
+    cards[params.shipnum] = decks[params.shipnum].takeObject(p)
+end
+function updateCard(object, params)
+    local card = cards[params.shipnum]
+    printToAll("Drawing card "..params.name.."#"..tostring(params.shipnum),{0,1,0})
+    card.setName(params.name.."#"..tostring(params.shipnum))
+end
 function Spawn_Ship(type, name, elite, position, rotation)
     local obj_parameters = {}
     obj_parameters.type = 'Custom_Model'
@@ -2622,6 +2772,7 @@ function Spawn_Ship(type, name, elite, position, rotation)
     local size = ""
     if type == "SHU" or type == "DEC" or type == "YT" then size = " LGS" end
     newship.setName("[AI:"..type..":"..ps.."] "..name.."#"..tostring(shipnum)..size)
+    Spawn_Card(type, name, position, shipnum)
     shipnum = shipnum + 1
 
     newship.scale({0.6327,0.6327,0.6327})
