@@ -734,7 +734,7 @@ function check(guid,move)
             local players = {}
             for i,ship in ipairs(getAllObjects()) do
                 local matches = string.match(ship.getName(),target)
-4                if not isAi(ship) and isShip(ship) and isInPlay(ship) and matches then
+                if not isAi(ship) and isShip(ship) and isInPlay(ship) and matches then
                     table.insert(players, ship)
                 end
             end
@@ -1790,7 +1790,7 @@ function UpdateNote(sort, next,complete)
     local ais = {}
     local showPlayers = true
     for i,ship in ipairs(getAllObjects()) do
-        if (isInPlay(ship) and (isAi(ship) or isShip(ship)  and showPlayers and getSkill(ship)~=nil)) then
+        if isInPlay(ship) and (isAi(ship) or isShip(ship)  and showPlayers and getSkill(ship)~=nil) then
             table.insert(ais, ship)
         end
     end -- [end loop for all ships]
