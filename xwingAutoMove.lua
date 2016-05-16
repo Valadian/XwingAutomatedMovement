@@ -1290,6 +1290,9 @@ function Render_ButtonState(object)
         elseif object==current then
             State_AIMove(object)
         end
+    elseif currentphase == AttackSort then
+        Render_Ruler(object)
+        Render_AttackButton(object)
     end
     --TODO Add Attack button states
 end
@@ -2608,6 +2611,8 @@ COLLIDER = {
     GR = "https://paste.ee/r/qIaBu",
     YT = "https://paste.ee/r/LIxnJ"
 }
+ELITE_ICON = "http://i.imgur.com/n9dywTO.png"
+
 shipnum = 1
 missionsquads = {}
 missionvectors = {}
@@ -2631,8 +2636,8 @@ function Action_setup(object)
         shipnum = 1
         local rule_page
         local turns = 12
+        printToAll("Setting up: "..mission, {0,1,0})
         if mission == "Local Trouble" then
-            printToAll("Setting up: "..mission, {0,1,0})
             table.insert(missionsquads, {name="Alpha",turn=0,vector=3,ai="attack",type="TIE",count={1,1,0,1,0,1}, elite=false})
             table.insert(missionsquads, {name="Beta",turn=0,vector=4,ai="attack",type="TIE",count={1,0,1,0,1,0}, elite=false})
             table.insert(missionsquads, {name="Gamma",turn=4,vector="1d6",ai="attack",type="INT",count={1,0,0,1,0,0}, elite=false})
@@ -2648,6 +2653,11 @@ function Action_setup(object)
             rule_page = 46
         end
         if mission == "Rescue Rebel Operatives" then
+            turns = 10
+            num_asteroids = 6
+            table.insert(missionsquads, {name="Alpha",turn=0,vector=3,ai="strike",type="TIE",count={1,1,0,1,0,1}, elite=false})
+            table.insert(missionsquads, {name="Beta",turn=0,vector=4,ai="strike",type="TIE",count={1,1,1,0,1,0}, elite=false})
+            table.insert(missionsquads, {name="Elite",turn=3,vector="1d6",ai="attack",type="INT",count={1,0,0,0,0,0}, elite=true})
 
         end
         if mission == "Test" then
@@ -2761,7 +2771,7 @@ function Spawn_Squad(squad)
     end
     for i,off in ipairs(squad_offsets) do
         if i<=quantity then
-            Spawn_Ship(squad.type, squad.name, squad.elite, add(position,off), rotation)
+            Spawn_Ship(squad.type, squad.name, squad.elite, squad.ai, add(position,off), rotation)
         end
     end
     squads[squad.turn+1] = squad
@@ -2825,7 +2835,7 @@ function updateCard(object, params)
     printToAll("Drawing card "..params.name.."#"..tostring(params.shipnum),{0,1,0})
     card.setName(params.name.."#"..tostring(params.shipnum))
 end
-function Spawn_Ship(type, name, elite, position, rotation)
+function Spawn_Ship(type, name, elite, ai, position, rotation)
     local obj_parameters = {}
     obj_parameters.type = 'Custom_Model'
     obj_parameters.position = position
@@ -2852,6 +2862,7 @@ function Spawn_Ship(type, name, elite, position, rotation)
     local size = ""
     if type == "SHU" or type == "DEC" or type == "YT" then size = " LGS" end
     newship.setName("[AI:"..type..":"..ps.."] "..name.."#"..tostring(shipnum)..size)
+    if elite then newship.setDescription("ai strike") end
     Spawn_Card(type, name, position, shipnum)
     shipnum = shipnum + 1
 
