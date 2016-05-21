@@ -13,6 +13,7 @@ locktimer = {}
 --Auto Dials
 --dial information
 dialpositions = {}
+CardData = nil
 
 -- Auto Actions
 focus = nil --'beca0f'
@@ -52,7 +53,8 @@ freshLock = nil
 function onload()
     --local aicard = getObjectFromGUID(aicardguid)
     local aicard = findObjectByName("AI Action Card")
-    if aicard then
+    local endturn = findObjectByName("End Turn")
+    if aicard~=nil then
         local prebutton = {['click_function'] = 'Action_PlanningPhase', ['label'] = 'Planning', ['position'] = {0, 0.3, -1.5}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 400, ['font_size'] = 250}
         aicard.createButton(prebutton)
 
@@ -64,6 +66,11 @@ function onload()
 
         local clearbutton = {['click_function'] = 'Action_EndPhase', ['label'] = 'End', ['position'] = {0, 0.3, 1.5}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 400, ['font_size'] = 250}
         aicard.createButton(clearbutton)
+    end
+    if endturn~=nil then
+
+        local clearbutton = {['click_function'] = 'Action_EndPhase', ['label'] = 'End', ['position'] = {0, -0.1, 0}, ['rotation'] =  {180, 225, 0}, ['width'] = 500, ['height'] = 500, ['font_size'] = 250}
+        endturn.createButton(clearbutton)
     end
     turn_marker = findObjectByName("Turn Marker")
     end_marker = findObjectByName("End Marker")
@@ -399,7 +406,9 @@ function CardDeleteButton(object)
         object.setPosition (CardData["Position"])
         object.setRotation (CardData["Rotation"])
         CardData["Color"] = nil
-        Action_AiMove(getObjectFromGUID(CardData["ShipGUID"]))
+        if currentphase == MoveSort then
+            Action_AiMove(getObjectFromGUID(CardData["ShipGUID"]))
+        end
     end
 end
 
@@ -1258,8 +1267,11 @@ function Render_ButtonState(object)
         if isAi(object) then
             object.clearButtons()
             if aimove[object.getGUID()]~=nil then
-                Render_Undo(object)
-
+                if airollboosted[object.getGUID()] then
+                    Render_AiUndoBoostBarrel(object)
+                else
+                    Render_Undo(object)
+                end
                 Render_AiFocusEvade(object)
 
                 Render_Ruler(object)
@@ -1294,7 +1306,6 @@ function Render_ButtonState(object)
         Render_Ruler(object)
         Render_AttackButton(object)
     end
-    --TODO Add Attack button states
 end
 function Render_Swerves(object)
     Render_SwerveLeft(object)
@@ -1697,7 +1708,9 @@ function RotateVector(direction, yRotation)
     local zDistance = math.sin(radrotval) * direction[1] * -1 + math.cos(radrotval) * direction[3]
     return {xDistance, direction[2], zDistance}
 end
+start_delay = ""
 function Action_PlanningPhase()
+    start_delay = ""
     currentphase = PlanningSort
     UpdatePlanningNote()
 end
@@ -1714,6 +1727,7 @@ function Action_MovePhase()
     aiswerved = {}
     aitargets = {}
     aistressed = {}
+    aidecloaked = {}
     -- ListAis(MoveSort)
     for i,ship in ipairs(getAllObjects()) do
         if isShip(ship) and isInPlay(ship) then
@@ -1772,14 +1786,26 @@ function Action_EndPhase()
         end
     end
     local note = "*** [FF0000]End Phase - Turn "..tostring(getTurnNumber()).."/"..tostring(getTotalTurns()).."[-] ***\n"
-    if getTurnNumber()==getTotalTurns() then
+    local done = getTurnNumber()==getTotalTurns()
+    if done then
         note = note.."[b]Mission Over[/b]"
     else
         note = note.."Auto-Cleaned up Focus/Evade/Etc\nMoved Turn Marker"
         local pos = turn_marker.getPosition()
         turn_marker.setPosition({pos[1],pos[2],pos[3]-2.59})
+
     end
     setNotes(note)
+    if not done then
+        startLuaCoroutine(nil, 'delayPlanning')
+    end
+end
+function delayPlanning()
+    for i=1, 50, 1 do
+        coroutine.yield(0)
+    end
+    Action_PlanningPhase()
+    return true
 end
 turn_marker_warning = false
 function getTurnNumber()
@@ -1869,10 +1895,12 @@ function UpdateNote(sort, next,complete)
     end
     setNotes(ai_string)
 end
-
+activation_started = false
 function UpdatePlanningNote()
     if currentphase == PlanningSort then
         local ai_string = "*** [FF80FF]Planning Phase - Turn "..tostring(getTurnNumber()).."/"..tostring(getTotalTurns()).."[-] ***"
+        local total = 0
+        local ready = 0
         for i,ship in ipairs(getAllObjects()) do
             if isShip(ship) and isInPlay(ship) and not isAi(ship) then
                 local status = "Waiting"
@@ -1884,16 +1912,45 @@ function UpdatePlanningNote()
 --                        found = true
 --                    end
 --                end
+                total = total + 1
                 if found then
                     status = "Ready"
+                    ready = ready + 1
                     statuscolor = "00FF00"
                     maneuver = " [101010]([-] "..ship.getVar('Maneuver').." [101010])[-]"
                 end
                 ai_string = ai_string .."\n".. prettyString(ship, false)..maneuver.." [101010][[-]["..statuscolor.."]"..status.."[-][101010]][-]"
             end
         end
+        ai_string = ai_string .. "\n" .. start_delay
         setNotes(ai_string)
+        if total>0 and total == ready and not activation_started==true then
+            start_delay = " . . . . . . . . . ."
+            startLuaCoroutine(nil, 'delayActivation')
+        end
     end
+end
+function delayActivation()
+    activation_started = true
+    for i=1, 10, 1 do
+        for i=1, 20, 1 do coroutine.yield(0) end
+        start_delay = string.sub(start_delay ,3)
+    end
+    local total = 0
+    local ready = 0
+    for i,ship in ipairs(getAllObjects()) do
+        if isShip(ship) and isInPlay(ship) and not isAi(ship) then
+            local found = ship.getVar('HasDial')
+            total = total + 1
+            if found then ready = ready + 1 end
+        end
+    end
+    if total == ready then
+        Action_MovePhase()
+    end
+    activation_started = false
+
+    return true
 end
 function ListAis(sort)
     printToAll("Sorting AIs, Found:",{0,1,0})
@@ -1970,28 +2027,28 @@ function FindNextAi(guid, sort)
         local ai = getObjectFromGUID(guid)
         if ai~=nil and not contains(ais, ai) then
             table.insert(ais, ai)
-            printToAll("Added self",{0,1,0})
+            -- printToAll("Added self",{0,1,0})
         end
     end
     table.sort(ais,sort)
-    for i,ship in ipairs(ais) do
-        printToAll("Searching "..prettyString(ship),{1,1,1})
-    end
+    -- for i,ship in ipairs(ais) do
+        -- printToAll("Searching "..prettyString(ship),{1,1,1})
+    -- end
     local selffound = false
     for i,ship in ipairs(ais) do
         if selffound or guid==nil then
             if isAi(ship) then
-                printToAll("Found Next AI: "..prettyString(ship),{0,1,0})
+                -- printToAll("Found Next AI: "..prettyString(ship),{0,1,0})
                 return ship
             else
-                printToAll("Found Next Player: "..prettyString(ship),{0,1,0})
+                -- printToAll("Found Next Player: "..prettyString(ship),{0,1,0})
                 table.insert(players_up_next,ship)
                 return ship
             end
         end
         if ship.getGUID()==guid then
             selffound = true
-            printToAll("Found Self: "..prettyString(ship),{0,1,0})
+            -- printToAll("Found Self: "..prettyString(ship),{0,1,0})
         end
     end
 end
@@ -2072,6 +2129,7 @@ function GoToNextMove(object)
         UpdateNote(MoveSort, next.getGUID())
     else
         UpdateNote(MoveSort, nil, true)
+        Action_AttackPhase()
     end
     for i,ship in ipairs(getAllObjects()) do
         if isAi(ship) and ship.getGUID()~=object.getGUID() then
@@ -2613,44 +2671,87 @@ COLLIDER = {
 }
 ELITE_ICON = "http://i.imgur.com/n9dywTO.png"
 
-shipnum = 1
-missionsquads = {}
-missionvectors = {}
 core_source = nil
 tfa_source = nil
-asteroid_min_x = -9.2
-asteroid_max_x = 9.2
-asteroid_min_y = -9.2
-asteroid_max_y = 9.2
-num_asteroids = 0
+r1 = 3.75
+v = {
+    _0000 = {x=0, y=4.5, rot=180}, --N
+    _0020 = {x=1, y=4.5, rot=180},
+    _0030 = {x= 1.5, y= 4.5, rot=180}, --v4 in Local Trouble
+    _0040 = {x=2, y=4.5, rot=180},
+    _0100 = {x=3, y=4.5, rot=180},
+    _0130 = {x= 4.5, y= 4.5, rot=225}, --upper right corner
+    _0130S = {x= 4, y= 4.5, rot=180}, --upper left corner facing south
+    _0200 = {x= 4.5, y= 3.0, rot=270},
+    _0230 = {x= 4.5, y= 1.5, rot=270}, --v5 in Local Trouble
+    _0240 = {x= 4.5, y= 1, rot=270},
+    _0300 = {x= 4.5, y= 0, rot=270}, --E
+    _0330 = {x= 4.5, y= -1.5, rot=270}, --v6 in Local Trouble
+    _0400 = {x= 4.5, y= -3.0, rot=270},
+
+    _0600 = {x= 0, y= -4.5, rot=0}, --S
+
+    _0800 = {x= -4.5, y= -3.0, rot=90},
+    _0830 = {x= -4.5, y= -1.5, rot=90}, --v1 in Local Trouble
+    _0900 = {x= -4.5, y= 0, rot=90}, --W
+    _0920 = {x= -4.5, y= 1, rot=90},
+    _0930 = {x= -4.5, y= 1.5, rot=90}, --v2 in Local Trouble
+    _1000 = {x= -4.5, y= 3.0, rot=90},
+    _1030 = {x= -4.5, y= 4.5, rot=135}, --upper left corner
+    _1030S = {x= -4, y= 4.5, rot=180}, --upper left corner facing south
+    _1100 = {x = -3, y = 4.5, rot=180},
+    _1120 = {x = -2, y = 4.5, rot=180},
+    _1130 = {x= -1.5, y= 4.5, rot=180}, --v3 in Local Trouble
+    _1200 = {x=0, y=4.5, rot=180}, --N
+    bay1 = {x=-1, y=0, rot = 210},
+    bay2 = {x=1, y=3, rot = 30}
+}
+local squads = {}
+local missionsquads = {}
+local missionvectors = {}
+local decks = {}
+local cards = {}
+local shipnum = 1
+local asteroid_min_x = -9.2
+local asteroid_max_x = 9.2
+local asteroid_min_y = -9.2
+local asteroid_max_y = 9.2
+local num_asteroids = 6
 function Action_setup(object)
     if mission_ps == nil or mission_players == nil then
         printToAll("Must select Number of players and Average Player Skill", {1,0,0})
     else
         local mission = object.getName():match '^Mission: (.*)'
-        local squads = {}
+        --local squads = {}
         missionsquads = {}
         missionvectors = {}
         decks = {}
         cards = {}
+        squads = {}
         shipnum = 1
+        asteroid_min_x = -9.2
+        asteroid_max_x = 9.2
+        asteroid_min_y = -9.2
+        asteroid_max_y = 9.2
+        num_asteroids = 0
         local rule_page
         local turns = 12
         printToAll("Setting up: "..mission, {0,1,0})
         if mission == "Local Trouble" then
+            turns = 10
+            num_asteroids = 6
+            rule_page = 46
             table.insert(missionsquads, {name="Alpha",turn=0,vector=3,ai="attack",type="TIE",count={1,1,0,1,0,1}, elite=false})
             table.insert(missionsquads, {name="Beta",turn=0,vector=4,ai="attack",type="TIE",count={1,0,1,0,1,0}, elite=false})
             table.insert(missionsquads, {name="Gamma",turn=4,vector="1d6",ai="attack",type="INT",count={1,0,0,1,0,0}, elite=false})
             table.insert(missionsquads, {name="Delta",turn=7,vector="1d6",ai="attack",type="TIE",count={0,1,1,0,1,1}, elite=false})
-            table.insert(missionvectors, {x=-4.5, y=-1.5, rot=90})
-            table.insert(missionvectors, {x=-4.5, y= 1.5, rot=90})
-            table.insert(missionvectors, {x=-1.5, y= 4.5, rot=180})
-            table.insert(missionvectors, {x= 1.5, y= 4.5, rot=180})
-            table.insert(missionvectors, {x= 4.5, y= 1.5, rot=-90})
-            table.insert(missionvectors, {x= 4.5, y=-1.5, rot=-90})
-            turns = 10
-            num_asteroids = 6
-            rule_page = 46
+--            table.insert(missionvectors, {x=-4.5, y=-1.5, rot=90})
+--            table.insert(missionvectors, {x=-4.5, y= 1.5, rot=90})
+--            table.insert(missionvectors, {x=-1.5, y= 4.5, rot=180})
+--            table.insert(missionvectors, {x= 1.5, y= 4.5, rot=180})
+--            table.insert(missionvectors, {x= 4.5, y= 1.5, rot=-90})
+--            table.insert(missionvectors, {x= 4.5, y=-1.5, rot=-90})
+            missionvectors = {v._0830,v._0930, v._1130, v._0030,v._0230,v._0330}
         end
         if mission == "Rescue Rebel Operatives" then
             turns = 10
@@ -2658,7 +2759,261 @@ function Action_setup(object)
             table.insert(missionsquads, {name="Alpha",turn=0,vector=3,ai="strike",type="TIE",count={1,1,0,1,0,1}, elite=false})
             table.insert(missionsquads, {name="Beta",turn=0,vector=4,ai="strike",type="TIE",count={1,1,1,0,1,0}, elite=false})
             table.insert(missionsquads, {name="Elite",turn=3,vector="1d6",ai="attack",type="INT",count={1,0,0,0,0,0}, elite=true})
+            table.insert(missionsquads, {name="Gamma",turn=5,vector="1d6",ai="strike",type="TIE",count={1,1,-6,1,-4,1}, elite=false})
+            table.insert(missionsquads, {name="Gamma",turn=5,vector="1d6",ai="strike",type="INT",count={0,0,6,0,4,0}, elite=false})
+            table.insert(missionsquads, {name="Delta",turn=7,vector="1d6",ai="strike",type="TIE",count={1,-8,1,-6,1,1}, elite=false})
+            table.insert(missionsquads, {name="Delta",turn=7,vector="1d6",ai="strike",type="INT",count={0,8,0,6,0,0}, elite=false})
+            missionvectors = {v._0830,v._0930, v._1030S, v._0130S,v._0230,v._0330}
+            --TODO implement spawning HWK-290
+        end
+        if mission == "Disable Sensor Net" then
+            turns = 12
+            num_asteroids = 12
+            asteroid_min_x = -9.2 - r1
+            asteroid_max_x = 9.2 + r1
+            asteroid_min_y = -9.2 - r1
+            asteroid_max_y = 9.2 + r1
+            table.insert(missionsquads, {name="Alpha",turn=0,vector=2,ai="attack",type="TIE",count={1,1,-6,1,-4,1}, elite=false})
+            table.insert(missionsquads, {name="Alpha",turn=0,vector=2,ai="attack",type="INT",count={0,0,6,0,4,0}, elite=false})
+            table.insert(missionsquads, {name="Beta",turn=0,vector=5,ai="attack",type="TIE",count={1,1,1,-6,1,-4}, elite=false})
+            table.insert(missionsquads, {name="Beta",turn=0,vector=5,ai="attack",type="INT",count={0,0,0,6,0,4}, elite=false})
+            table.insert(missionsquads, {name="Patrol",turn=1,vector="1d6",ai="attack",type="INT",count={1,0,0,0,0,0}, elite=false})
+            table.insert(missionsquads, {name="Elite",turn=2,vector="1d6",ai="attack",type="*",count={1,0,0,0,0,0}, elite=true})
+            missionvectors = {v._0830,v._0930, v._1130, v._0030,v._0230,v._0330}
+            --TODO: implement spawning Sensor Beacons
+            --TODO implement spawning HWK-290
+        end
 
+        if mission == "Capture Refueling Station" then
+            turns = 12
+            num_asteroids = 6
+            asteroid_min_x = -9.2 - r1
+            asteroid_max_x = 9.2 + r1
+            asteroid_min_y = -9.2 - r1
+            asteroid_max_y = 9.2 - r1*3
+            table.insert(missionsquads, {name="Alpha",turn=0,vector="bay1",ai="attack",type="TIE",count={1,-8,1,-6,1,1}, elite=false})
+            table.insert(missionsquads, {name="Alpha",turn=0,vector="bay1",ai="attack",type="INT",count={0,8,0,6,0,0}, elite=false})
+            table.insert(missionsquads, {name="Beta",turn=0,vector="bay2",ai="attack",type="INT",count={0,1,0,1,0,1}, elite=false})
+            table.insert(missionsquads, {name="Gamma",turn=4,vector="bay1",ai="attack",type="TIE",count={1,1,-6,1,-4,1}, elite=false})
+            table.insert(missionsquads, {name="Gamma",turn=4,vector="bay1",ai="attack",type="ADV",count={0,0,6,0,4,0}, elite=false})
+            table.insert(missionsquads, {name="Delta",turn=5,vector="bay2",ai="attack",type="BOM",count={1,0,1,0,1,0}, elite=false})
+            table.insert(missionsquads, {name="Elite",turn=8,vector="1d6",ai="attack",type="*",count={1,0,0,0,0,0}, elite=true})
+            missionvectors = {v._0800,v._0900, v._1000, v._0200,v._0300,v._0400, bay1 = v.bay1, bay2 = v.bay2}
+            --TODO: implement spawning refueling station
+
+        end
+        if mission == "Tread Softly" then
+            turns = 12
+            table.insert(missionsquads, {name="Minelayer",turn=0,vector=3,ai="attack",type="BOM",count={1,8,1,0,1,0}, elite=false})
+            table.insert(missionsquads, {name="Alpha",turn=0,vector=5,ai="attack",type="TIE",count={1,1,-6,1,-4,1}, elite=false})
+            table.insert(missionsquads, {name="Alpha",turn=0,vector=5,ai="attack",type="INT",count={0,0,6,0,4,0}, elite=false})
+            table.insert(missionsquads, {name="Elite",turn=5,vector="1d6",ai="attack",type="BOM",count={1,0,0,0,0,0}, elite=true})
+            table.insert(missionsquads, {name="Beta",turn=7,vector="1d6",ai="attack",type="TIE",count={1,1,8,1,6,1}, elite=false})
+            missionvectors = {v._0830,v._0930, v._1130, v._0030,v._0230,v._0330}
+            --TODO: implement minefield spawning
+
+        end
+        if mission == "Imperial Entanglements" then
+            turns = 10
+            table.insert(missionsquads, {name="Alpha",turn=0,vector=2,ai="attack",type="INT",count={1,0,6,1,0,4}, elite=false})
+            table.insert(missionsquads, {name="Beta",turn=0,vector=4,ai="attack",type="TIE",count={1,1,0,1,0,1}, elite=false})
+            table.insert(missionsquads, {name="Gamma",turn=3,vector="1d3",ai="strike",type="BOM",count={1,0,1,8,1,0}, elite=false})
+            table.insert(missionsquads, {name="Decimator",turn=6,vector="c",ai="strike",type="DEC",count={1,0,0,0,0,0}, elite=false})
+            table.insert(missionsquads, {name="Delta",turn=6,vector="1d6",ai="attack",type="TIE",count={8,1,-6,1,-4,1}, elite=false})
+            table.insert(missionsquads, {name="Delta",turn=6,vector="1d6",ai="attack",type="*",count={0,0,1,0,1,0}, elite=false})
+
+            missionvectors = {v._0630, v._0830,v._0930, v._1130, v._0030,v._0230,v._0330,c = v._0730}
+            --TODO: implement minefield spawning
+            --TODO: implement Transport spawning
+            --TODO: implement Decimator spawning
+            --TODO: implement spawning Ion Pulse Missile
+        end
+        if mission == "Care Package" then
+            turns = 10
+            num_asteroids = 12
+            asteroid_min_x = -9.2 - r1
+            asteroid_max_x = 9.2 + r1
+            table.insert(missionsquads, {name="Alpha",turn=0,vector=3,ai="attack",type="TIE",count={1,1,1,-6,1,-4}, elite=false})
+            table.insert(missionsquads, {name="Alpha",turn=0,vector=3,ai="attack",type="INT",count={0,0,0,6,0,4}, elite=false})
+            table.insert(missionsquads, {name="Beta",turn=0,vector=4,ai="attack",type="TIE",count={1,1,-8,1,-4,1}, elite=false})
+            table.insert(missionsquads, {name="Beta",turn=0,vector=4,ai="attack",type="INT",count={0,0,8,0,4,0}, elite=false})
+            table.insert(missionsquads, {name="Assault1",turn=3,vector="*",ai="strike",type="BOM",count={1,8,1,0,1,0}, elite=false})
+            table.insert(missionsquads, {name="Elite",turn=3,vector="1d6",ai="attack",type="*",count={1,0,0,0,0,0}, elite=true})
+            table.insert(missionsquads, {name="Gamma",turn=6,vector="1d6",ai="attack",type="TIE",count={1,-8,1,-6,1,-4}, elite=false})
+            table.insert(missionsquads, {name="Gamma",turn=6,vector="1d6",ai="attack",type="INT",count={0,8,0,6,0,4}, elite=false})
+            table.insert(missionsquads, {name="Assault2",turn=6,vector="*",ai="srike",type="BOM",count={6,1,0,1,0,1}, elite=false})
+            missionvectors = {v._0600, v._0730,v._0900, v._1200, v._0130,v._0300}
+            --TODO: implement Transport spawning
+            --TODO: implement spawning proton torpedo
+        end
+        if mission == "Needle in a Haystack" then
+            turns = 12
+            table.insert(missionsquads, {name="Alpha",turn=0,vector=3,ai="strike",type="TIE",count={1,1,0,1,0,1}, elite=false})
+            table.insert(missionsquads, {name="Alpha",turn=0,vector=3,ai="strike",type="*",count={0,0,8,0,6,0}, elite=false})
+            table.insert(missionsquads, {name="Beta",turn=0,vector=4,ai="strike",type="TIE",count={1,1,1,0,1,0}, elite=false})
+            table.insert(missionsquads, {name="Beta",turn=0,vector=4,ai="strike",type="*",count={0,0,0,6,0,4}, elite=false})
+            table.insert(missionsquads, {name="Gamma",turn=5,vector="1d6",ai="strike",type="TIE",count={1,1,0,1,0,0}, elite=false})
+            table.insert(missionsquads, {name="Delta",turn=8,vector="1d6",ai="strike",type="*",count={1,0,1,0,1,0}, elite=false})
+            table.insert(missionsquads, {name="Phantom",turn="*",vector="1d6",ai="attack",type="PHA",count={1,0,0,1,0,0}, elite=false})
+
+            missionvectors = {v._0830,v._0930, v._1130, v._0030,v._0230,v._0330}
+            --TODO: implement ion storm spawning
+            --TODO: implement tracking token spawning
+            --TODO: implement Assault Ship spawning
+        end
+        if mission == "Bait" then
+            turns = 10
+            num_asteroids = 6
+            asteroid_min_x = -9.2 - r1
+            asteroid_max_x = 9.2 + r1
+            asteroid_min_y = -9.2 - r1
+            asteroid_max_y = 9.2 + r1
+            table.insert(missionsquads, {name="Alpha",turn=0,vector="1d6",ai="attack",type="TIE",count={1,1,1,-4,1,-8}, elite=false})
+            table.insert(missionsquads, {name="Alpha",turn=0,vector="1d6",ai="attack",type="*",count={0,0,0,4,0,8}, elite=false})
+            table.insert(missionsquads, {name="Beta",turn=0,vector="1d6+6",ai="attack",type="TIE",count={1,1,-8,1,-6,1}, elite=false})
+            table.insert(missionsquads, {name="Beta",turn=0,vector="1d6+6",ai="attack",type="*",count={0,0,8,0,6,0}, elite=false})
+            table.insert(missionsquads, {name="SupportA",turn=3,vector="1d6",ai="attack",type="SHU",count={0,1,0,0,0,0}, elite=false})
+            table.insert(missionsquads, {name="SupportB",turn=3,vector="*",ai="attack",type="SHU",count={0,0,0,0,1,0}, elite=false})
+            table.insert(missionsquads, {name="Elite",turn=4,vector="1d12",ai="*",type="PHA",count={1,0,0,0,0,0}, elite=true})
+            table.insert(missionsquads, {name="Gamma",turn=6,vector="1d6",ai="attack",type="TIE",count={1,1,1,-8,1,-6}, elite=false})
+            table.insert(missionsquads, {name="Gamma",turn=6,vector="1d6",ai="attack",type="*",count={0,0,0,8,0,6}, elite=false})
+            table.insert(missionsquads, {name="Delta",turn=8,vector="1d6+6",ai="attack",type="TIE",count={1,1,-6,1,-4,1}, elite=false})
+            table.insert(missionsquads, {name="Delta",turn=8,vector="1d6+6",ai="attack",type="*",count={0,0,6,0,4,0}, elite=false})
+            --TODO: implement random filtering (not shuttle/phantom)
+            missionvectors = {v._0730,v._0830,v._0930,v._1030,v._1130, v._0030,v._0130,v._0230,v._0330,v._0430,v._0530,v._0630}
+            --TODO: implement Transport spawning
+            --TODO: implement starting cloaked
+            --TODO: implement spawning shuttle abilities
+        end
+        if mission == "Cloak and Dagger" then
+            turns = 12
+            table.insert(missionsquads, {name="Alpha",turn=0,vector=3,ai="attack",type="PHA",count={1,8,1,0,0,0}, elite=false})
+            table.insert(missionsquads, {name="Beta",turn=4,vector="1d6",ai="attack",type="TIE",count={1,1,-6,1,-8,1}, elite=false})
+            table.insert(missionsquads, {name="Beta",turn=4,vector="1d6",ai="attack",type="*",count={0,0,6,0,8,0}, elite=false})
+            --TODO: implement random filtering (not shuttle/phantom)
+            table.insert(missionsquads, {name="Gamma",turn=8,vector="1d6",ai="attack",type="TIE",count={1,1,1,-4,1,-6}, elite=false})
+            table.insert(missionsquads, {name="Gamma",turn=8,vector="1d6",ai="attack",type="INT",count={0,0,0,4,0,6}, elite=false})
+
+            missionvectors = {v._0830,v._0930, v._1130, v._0030,v._0230,v._0330}
+            --TODO: implement ion storm spawning5
+            --TODO: implement spawning partial stations on side
+        end
+        if mission == "Revenge" then
+            turns = 10
+            table.insert(missionsquads, {name="Aces",turn=1,vector="1d12",ai="strike",type="INT",count={1,1,1,1,1,1}, elite=true})
+            --TODO: implement ion storm spawning
+            --TODO: elites match player PS
+            --TODO: implement multistrike
+        end
+        if mission == "Capture Officer" then
+            turns = 12
+            num_asteroids = 6
+            asteroid_min_x = -9.2 - r1
+            asteroid_max_x = 9.2 + r1
+            asteroid_min_y = -9.2 - r1
+            asteroid_max_y = 9.2 + r1
+            table.insert(missionsquads, {name="Shuttle",turn=0,vector=7,ai="attack",type="SHU",count={1,0,0,0,0,0}, elite=false})
+            table.insert(missionsquads, {name="Alpha",turn=0,vector=7,ai="attack",type="TIE",count={1,1,0,1,0,1}, elite=false})
+            table.insert(missionsquads, {name="Elite",turn=2,vector="1d6",ai="attack",type="ADV",count={1,0,0,0,0,0}, elite=true})
+            table.insert(missionsquads, {name="Beta",turn=4,vector="1d6",ai="attack",type="TIE",count={1,-6,1,-8,1,-4}, elite=false})
+            table.insert(missionsquads, {name="Beta",turn=4,vector="1d6",ai="attack",type="*",count={0,6,0,8,0,4}, elite=false})
+            table.insert(missionsquads, {name="Gamma",turn=8,vector="1d6",ai="attack",type="TIE",count={1,-4,1,-6,1,-8}, elite=false})
+            table.insert(missionsquads, {name="Gamma",turn=8,vector="1d6",ai="attack",type="INT",count={0,4,0,6,0,8}, elite=false})
+            table.insert(missionsquads, {name="Delta",turn=11,vector="1d6",ai="attack",type="INT",count={1,1,0,1,0,1}, elite=false})
+            missionvectors = {v._0530,v._0630,v._0930, v._1130, v._0030,v._0230, {x=0, y=-1,rot=180}}
+        end
+        if mission == "Nobody Home" then
+            turns = 10
+            num_asteroids = 6
+            asteroid_min_x = -9.2 - r1
+            asteroid_max_x = 9.2 + r1
+            asteroid_min_y = -9.2 - r1
+            asteroid_max_y = 9.2 + r1
+            table.insert(missionsquads, {name="Obstacle",turn=0,vector=6,ai="stiketarget",type="SHU",count={1,0,0,0,0,0}, elite=false})
+            table.insert(missionsquads, {name="Alpha",turn=0,vector=1,ai="strike",type="INT",count={1,0,0,8,1,0}, elite=false})
+            table.insert(missionsquads, {name="Beta",turn=0,vector=2,ai="strike",type="INT",count={0,6,1,0,0,1}, elite=false})
+            table.insert(missionsquads, {name="Delta",turn=0,vector=3,ai="strike",type="TIE",count={1,1,-4,1,-8,1}, elite=false})
+            table.insert(missionsquads, {name="Delta",turn=0,vector=3,ai="strike",type="*",count={0,0,4,0,8,0}, elite=false})
+            table.insert(missionsquads, {name="Command",turn=0,vector=4,ai="strike",type="SHU",count={1,0,0,0,0,0}, elite=true})
+            table.insert(missionsquads, {name="Epsilon",turn=0,vector=5,ai="strike",type="TIE",count={1,1,1,-6,1,-4}, elite=false})
+            table.insert(missionsquads, {name="Epsilon",turn=0,vector=5,ai="strike",type="*",count={0,0,0,6,0,4}, elite=false})
+            missionvectors = {v._1100,v._1120,v._0020, v._0040, v._0100, {x=0, y=-2,rot=180}}
+            --TODO: implement debris spawning
+        end
+        if mission == "Miners' Strike" then
+            turns = 12
+            table.insert(missionsquads, {name="Cargo",turn=0,vector=7,ai="flee",type="SHU",count={1,0,0,0,0,0}, elite=false})
+            table.insert(missionsquads, {name="Cargo",turn=0,vector=8,ai="flee",type="SHU",count={0,0,0,1,0,0}, elite=false})
+            table.insert(missionsquads, {name="Alpha",turn=0,vector=2,ai="attack",type="TIE",count={1,0,1,0,1,0}, elite=false})--2/3?
+            table.insert(missionsquads, {name="Beta",turn=0,vector=4,ai="attack",type="TIE",count={0,1,0,1,0,1}, elite=false})--4/5?
+            table.insert(missionsquads, {name="Gamma",turn=6,vector="1d6",ai="attack",type="TIE",count={1,-6,1,-8,1,-4}, elite=false})
+            table.insert(missionsquads, {name="Gamma",turn=6,vector="1d6",ai="attack",type="*",count={0,6,0,8,0,4}, elite=false})
+            table.insert(missionsquads, {name="Delta",turn=8,vector="1d6",ai="attack",type="TIE",count={1,-8,1,-4,1,-6}, elite=false})
+            table.insert(missionsquads, {name="Delta",turn=8,vector="1d6",ai="attack",type="*",count={0,8,0,4,0,6}, elite=false})
+
+            --TODO: spawn station components
+            missionvectors = {v._0630,v._0830,v._0930, v._1130, v._0030,v._0230,{x=0,y=3,rot=180},{x=2,y=2,rot=270}}
+        end
+        if mission == "Secure Holonet Receiver" then
+            turns = 12
+            num_asteroids = 6
+            asteroid_min_x = -9.2 - r1
+            asteroid_max_x = 9.2 + r1
+            asteroid_min_y = -9.2 - r1
+            asteroid_max_y = 9.2 + r1
+            table.insert(missionsquads, {name="Alpha",turn=0,vector=2,ai="attack",type="TIE",count={1,1,-8,1,-6,1}, elite=false})
+            table.insert(missionsquads, {name="Alpha",turn=0,vector=2,ai="attack",type="*",count={0,0,8,0,6,0}, elite=false})
+            table.insert(missionsquads, {name="Beta",turn=0,vector=5,ai="attack",type="TIE",count={1,1,1,-6,1,-4}, elite=false})
+            table.insert(missionsquads, {name="Beta",turn=0,vector=5,ai="attack",type="*",count={0,0,0,6,0,4}, elite=false})
+            table.insert(missionsquads, {name="Gamma",turn=4,vector="1d6",ai="attack",type="TIE",count={0,1,0,1,0,1}, elite=false})
+            table.insert(missionsquads, {name="Gamma",turn=4,vector="1d6",ai="attack",type="INT",count={8,0,4,0,6,0}, elite=false})
+            --TODO: Spawn Satellite Relays
+            --TODO: Spawn Station
+            --TODO: spawn HWK-290
+            missionvectors = {v._0600,v._0730,v._0900, v._0000,v._0130,v._0300}
+        end
+        if mission == "Defector" then
+            turns = 10
+            num_asteroids = 6
+            table.insert(missionsquads, {name="Prototype",turn=0,vector=4,ai="attack",type="DEF",count={1,1,0,1,0,1}, elite=false})
+            table.insert(missionsquads, {name="Alpha",turn=0,vector=1,ai="attack",type="TIE",count={1,1,1,-8,1,-6}, elite=false})
+            table.insert(missionsquads, {name="Alpha",turn=0,vector=1,ai="attack",type="*",count={0,0,0,8,0,6}, elite=false})
+            table.insert(missionsquads, {name="Beta",turn=0,vector=6,ai="attack",type="TIE",count={1,1,1,-6,1,-4}, elite=false})
+            table.insert(missionsquads, {name="Beta",turn=0,vector=6,ai="attack",type="*",count={0,0,0,6,0,4}, elite=false})
+            table.insert(missionsquads, {name="Gamma",turn=4,vector=3,ai="attack",type="SHU",count={1,0,0,0,0,0}, elite=false})
+            table.insert(missionsquads, {name="Gamma",turn=4,vector=3,ai="attack",type="TIE",count={0,0,1,6,1,4}, elite=false})
+            table.insert(missionsquads, {name="Delta",turn=8,vector="1d6",ai="attack",type="TIE",count={1,-8,1,-6,1,-4}, elite=false})
+            table.insert(missionsquads, {name="Delta",turn=8,vector="1d6",ai="attack",type="*",count={0,8,0,6,0,4}, elite=false})
+            --TODO: implement random filters
+            missionvectors = {v._920,v._1030S,v._1130,v._0030,v._0130S,v._0240}
+
+        end
+        if mission == "Pride of the Empire" then
+            turns = 12
+            num_asteroids = 6
+            asteroid_min_x = -9.2 - r1
+            asteroid_max_x = 9.2 + r1
+            asteroid_min_y = -9.2 - r1
+            asteroid_max_y = 9.2 + r1
+            -- c = 13, d = 14, e = 15, f = 16, center = 17
+            table.insert(missionsquads, {name="Instructor",turn=0,vector=17,ai="attack",type="SHU",count={1,0,0,0,0,0}, elite=false})
+            table.insert(missionsquads, {name="Alpha",turn=0,vector=13,ai="attack",type="DEF",count={1,0,0,0,0,0}, elite=true})
+            table.insert(missionsquads, {name="Alpha",turn=0,vector=13,ai="attack",type="TIE",count={0,0,1,0,1,0}, elite=false})
+            table.insert(missionsquads, {name="Beta",turn=0,vector=14,ai="attack",type="DEF",count={0,0,0,1,0,0}, elite=true})
+            table.insert(missionsquads, {name="Beta",turn=0,vector=14,ai="attack",type="TIE",count={1,1,0,0,0,0}, elite=false})
+            table.insert(missionsquads, {name="Gamma",turn=0,vector=15,ai="attack",type="DEF",count={0,0,1,0,0,0}, elite=true})
+            table.insert(missionsquads, {name="Gamma",turn=0,vector=15,ai="attack",type="TIE",count={1,0,0,0,1,0}, elite=false})
+            table.insert(missionsquads, {name="Delta",turn=0,vector=16,ai="attack",type="DEF",count={0,0,0,0,0,1}, elite=true})
+            table.insert(missionsquads, {name="Delta",turn=0,vector=16,ai="attack",type="TIE",count={0,1,0,1,0,0}, elite=false})
+            table.insert(missionsquads, {name="Epsilon",turn=8,vector="1d12",ai="attack",type="INT",count={1,0,1,0,1,0}, elite=false})
+            table.insert(missionsquads, {name="Epsilon",turn=8,vector="1d12",ai="attack",type="TIE",count={0,8,0,6,0,4}, elite=false})
+            missionvectors = {v._0730,v._0830,v._0930,v._1030,v._1130,v._0030,v._0130,v._0230,v._0330,v._0430,v._0530,v._0630,
+                {x=-1.5, y=1.5,rot=90}, --C
+                {x=-1.5, y=-1.5,rot=180}, --D
+                {x=1.5,y=-1.5,rot=270}, --E
+                {x=1.5,y=1.5,rot=0}, --F
+                {x=0,y=0,rot=180}    --center
+                }
         end
         if mission == "Test" then
 --            shipnum = 1
@@ -2675,8 +3030,6 @@ function Action_setup(object)
         for i,squad in ipairs(missionsquads) do
             Spawn_Squad(squad)
         end
-        core_source = findObjectByNameAndType("Core Set Asteroids","Infinite")
-        tfa_source = findObjectByNameAndType("TFA Set Asteroids","Infinite")
 --        local rules1 = findObjectByName("Rules Page 1")
 --        rules1.setState(rule_page)
 --        local rules2 = findObjectByName("Rules Page 2")
@@ -2690,8 +3043,11 @@ end
 function mod(a,b)
     return a - math.floor(a/b)*b
 end
+local asteroids = {}
 function spawnAllAsteroidsCoroutine()
     asteroids = {}
+    local core_source = findObjectByNameAndType("Core Set Asteroids","Infinite")
+    local tfa_source = findObjectByNameAndType("TFA Set Asteroids","Infinite")
     for i=1,num_asteroids,1 do
         local i_roll = math.random(12)
         local params = {}
@@ -2757,21 +3113,49 @@ PS =  {
     SHU = {2,4, 4, 6, 8},
     DEC = {3, nil, nil, nil, nil}
 }
-squad_offsets = {{0,0,0},{2.2,0,0},{0,0,-2.2},{2.2,0,-2.2} }
-squads = {}
+squad_offsets = {{0,0,0},{2.2,0,0},{0,0,2.2},{2.2,0,2.2} }
+
+squad_types = {"INT","INT","INT","INT","INT","INT",
+               "BOM","BOM","BOM","BOM","BOM","BOM",
+               "ADV","ADV","ADV","ADV",
+               "DEF","DEF","DEF","DEF",
+               "PHA","PHA","PHA","PHA",
+               "SHU","SHU","SHU","SHU" }
+placement_offset = {
+    {0,0,0.25},
+    {1.46,0,0.25},
+    {1.46,0,2.46},
+    {1.46,0,2.46}
+}
 function Spawn_Squad(squad)
+    --TODO: implement type filtering
+    --One Row? +0.25
+    --Two Row? +2.46
+    --One column? 0
+    --Two column? +1.46
+    if squad.type == "*" then
+        local pick = math.random(28)
+        squad.type = squad_types[pick]
+    end
     local quantity = countSquad(squad)
+    if quantity==0 then return end
     local position = {0,0,0 }
+    local temp_position = {0,0,0}
     local rotation = 0
+    local card = math.random(pilot_card_num[squad.type])
+    local adjust = {0,0,0}
+    temp_position = calculateTempPosition(squad)
     if squad.turn==0 then
         position = calculateRealPosition(squad)
         rotation = missionvectors[squad.vector].rot
+        local adjustlookup = placement_offset[quantity]
+        adjust = RotateVector(adjustlookup,rotation)
     else
-        position = calculateTempPosition(squad)
+        position = temp_position
     end
     for i,off in ipairs(squad_offsets) do
         if i<=quantity then
-            Spawn_Ship(squad.type, squad.name, squad.elite, squad.ai, add(position,off), rotation)
+            Spawn_Ship(squad.type, squad.name, squad.elite, squad.ai, card, add(add(position,off),adjust), rotation, add(temp_position,off))
         end
     end
     squads[squad.turn+1] = squad
@@ -2783,15 +3167,16 @@ function calculateTempPosition(squad)
     local x = 21.7
     if squads[squad.turn]~=nil and squads[squad.turn-1]~=nil then x = x+4.4 end
     local position = {x, 1, 13.3 - (squad.turn-1)*2.59 }
-    if squad.turn == 0 then position = {-5, 1, 13.3} end
+    if squad.turn == 0 then position = add(position,{0,0,2.59}) end
     if squads[squad.turn+1]~=nil then position = add(position, {10,0,0}) end
     return position
 end
 function countSquad(squad)
     local number = 0
     for i,s in ipairs(squad.count) do
-        if s>0 and i<=mission_players then number = number+1 end
-    end
+        if s>0 and s<=mission_ps and i<=mission_players then number = number+1 end
+        if s<0 and s>=-mission_ps and i<=mission_players then number = number-1 end
+        end
     return number
 end
 --INT 6
@@ -2803,39 +3188,7 @@ end
 function add(pos, offset)
     return {pos[1] + offset[1],pos[2] + offset[2],pos[3] + offset[3]}
 end
-pilot_card_offsets = {TIE=0,INT=1,BOM=7,ADV=13, DEF=17, PHA=21, SHU=25 }
-pilot_card_num = {TIE=1,INT=6,BOM=6,ADV=4,DEF=4,PHA=4,SHU=4}
-decks = {}
-cards = {}
-function Spawn_Card(type, name, position, shipnum)
-    local pilots = findObjectByNameAndType("Imperial Pilots","Infinite")
-    local params = {}
-    -- params.position = pilots.getPosition()
-    -- params.position[1] = params.position[1]+5
-    -- params.position[2] = 5
-    params.position = {22,5,19.2 }
-    params.callback = 'drawCard'
-    params.callback_owner = Global
-    local index = pilot_card_offsets[type]+math.random(pilot_card_num[type])-1
-    printToAll("Drawing card "..index,{0,1,0})
-    params.params = {index = index, shipnum = shipnum, name = name, position = position }
-    decks[shipnum] = pilots.takeObject(params)
-end
-function drawCard(object, params)
-    local p = {}
-    p.position = add(params.position,{5,3,0}) --{22,5,14 }
-    p.index = params.index
-    p.callback = 'updateCard'
-    p.callback_owner = Global
-    p.params = params
-    cards[params.shipnum] = decks[params.shipnum].takeObject(p)
-end
-function updateCard(object, params)
-    local card = cards[params.shipnum]
-    printToAll("Drawing card "..params.name.."#"..tostring(params.shipnum),{0,1,0})
-    card.setName(params.name.."#"..tostring(params.shipnum))
-end
-function Spawn_Ship(type, name, elite, ai, position, rotation)
+function Spawn_Ship(type, name, elite, ai, card, position, rotation, temp_pos)
     local obj_parameters = {}
     obj_parameters.type = 'Custom_Model'
     obj_parameters.position = position
@@ -2862,10 +3215,42 @@ function Spawn_Ship(type, name, elite, ai, position, rotation)
     local size = ""
     if type == "SHU" or type == "DEC" or type == "YT" then size = " LGS" end
     newship.setName("[AI:"..type..":"..ps.."] "..name.."#"..tostring(shipnum)..size)
-    if elite then newship.setDescription("ai strike") end
-    Spawn_Card(type, name, position, shipnum)
+    if ai=="strike" then newship.setDescription("ai strike") end
+    Spawn_Card(type, name, temp_pos, shipnum, card)
     shipnum = shipnum + 1
 
     newship.scale({0.6327,0.6327,0.6327})
     --newship.lock()
+end
+pilot_card_offsets = {TIE=0,INT=1,BOM=7,ADV=13, DEF=17, PHA=21, SHU=25 }
+pilot_card_num = {TIE=1,INT=6,BOM=6,ADV=4,DEF=4,PHA=4,SHU=4}
+decks = {}
+cards = {}
+function Spawn_Card(type, name, position, shipnum, card)
+    local pilots = findObjectByNameAndType("Imperial Pilots","Infinite")
+    local params = {}
+    -- params.position = pilots.getPosition()
+    -- params.position[1] = params.position[1]+5
+    -- params.position[2] = 5
+    params.position = {22,5,27.2 }
+    params.callback = 'drawCard'
+    params.callback_owner = Global
+    local index = pilot_card_offsets[type]+card-1 --math.random(pilot_card_num[type])-1
+    printToAll("Drawing card "..index,{0,1,0})
+    params.params = {index = index, shipnum = shipnum, name = name, position = position }
+    decks[shipnum] = pilots.takeObject(params)
+end
+function drawCard(object, params)
+    local p = {}
+    p.position = add(params.position,{5,3,0}) --{22,5,14 }
+    p.index = params.index
+    p.callback = 'updateCard'
+    p.callback_owner = Global
+    p.params = params
+    cards[params.shipnum] = decks[params.shipnum].takeObject(p)
+end
+function updateCard(object, params)
+    local card = cards[params.shipnum]
+    printToAll("Drawing card "..params.name.."#"..tostring(params.shipnum),{0,1,0})
+    card.setName(params.name.."#"..tostring(params.shipnum))
 end

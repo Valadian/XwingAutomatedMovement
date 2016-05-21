@@ -67,9 +67,9 @@ function onload()
     button.label = 'TOGGLE RULERS'
     button.position = {8, 0.1, 0}
     button.rotation = {0, 90, 0}
-    button.width = 4000
+    button.width = 5000
     button.height = 1200 -- 40
-    button.font_size = 2000
+    button.font_size = 1500
     self.createButton(button)
 
 end
