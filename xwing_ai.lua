@@ -3,8 +3,6 @@
 
 function onload()
     Render_Menu_v2()
-    turn_marker = findObjectByName("Turn Marker")
-    end_marker = findObjectByName("End Marker")
 end
 --Render Section
 function Render_Menu_v1()

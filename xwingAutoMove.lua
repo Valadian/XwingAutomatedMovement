@@ -805,6 +805,7 @@ function check(guid,move)
             right(guid,-0.73999404907227,4.3295917510986,0,0,0)
             notify(guid,move,'decloak backwards right')
         end
+
         -- MISC Commands
     elseif move == 'checkpos' then
         checkpos(guid)
@@ -1029,26 +1030,20 @@ currentphase = nil
 turn_marker = nil
 end_marker = nil
 function onload_ai()
-    local aicard = findObjectByName("AI Action Card")
-    local endturn = findObjectByName("End Turn")
-    if aicard~=nil then
-        local prebutton = {['click_function'] = 'Action_Planning', ['label'] = 'Planning', ['position'] = {0, 0.3, -1.5}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 400, ['font_size'] = 250}
-        aicard.createButton(prebutton)
-
-        local flipbutton = {['click_function'] = 'Action_Activation', ['label'] = 'Activation', ['position'] = {0, 0.3, -0.5}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 400, ['font_size'] = 250}
-        aicard.createButton(flipbutton)
-
-        local attackbutton = {['click_function'] = 'Action_Combat', ['label'] = 'Combat', ['position'] = {0, 0.3, 0.5}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 400, ['font_size'] = 250}
-        aicard.createButton(attackbutton)
-
-        local clearbutton = {['click_function'] = 'Action_End', ['label'] = 'End', ['position'] = {0, 0.3, 1.5}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 400, ['font_size'] = 250}
-        aicard.createButton(clearbutton)
-    end
-    if endturn~=nil then
-
-        local clearbutton = {['click_function'] = 'Action_End', ['label'] = 'End', ['position'] = {0, -0.1, 0}, ['rotation'] =  {180, 225, 0}, ['width'] = 500, ['height'] = 500, ['font_size'] = 250}
-        endturn.createButton(clearbutton)
-    end
+--    local aicard = findObjectByName("AI Action Card")
+--    if aicard~=nil then
+--        local prebutton = {['click_function'] = 'Action_Planning', ['label'] = 'Planning', ['position'] = {0, 0.3, -1.5}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 400, ['font_size'] = 250}
+--        aicard.createButton(prebutton)
+--
+--        local flipbutton = {['click_function'] = 'Action_Activation', ['label'] = 'Activation', ['position'] = {0, 0.3, -0.5}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 400, ['font_size'] = 250}
+--        aicard.createButton(flipbutton)
+--
+--        local attackbutton = {['click_function'] = 'Action_Combat', ['label'] = 'Combat', ['position'] = {0, 0.3, 0.5}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 400, ['font_size'] = 250}
+--        aicard.createButton(attackbutton)
+--
+--        local clearbutton = {['click_function'] = 'Action_End', ['label'] = 'End', ['position'] = {0, 0.3, 1.5}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 400, ['font_size'] = 250}
+--        aicard.createButton(clearbutton)
+--    end
     turn_marker = findObjectByName("Turn Marker")
     end_marker = findObjectByName("End Marker")
 end
@@ -2615,19 +2610,9 @@ end
 function onObjectEnterScriptingZone(zone, object)
     if zone.getGUID() == missionzone and object~=nil and object.tag == 'Card' and object.getName():match '^Mission: (.*)' then
         object.clearButtons()
-        local offset = 0
-        for i,num in ipairs({1,2,3,4,5,6}) do
-            local p = {['click_function'] = 'Action_SetPlayer'..num, ['label'] = num..'P', ['position'] = {-1.5, 0.5, -1.3 + offset}, ['rotation'] =  {0, 0, 0}, ['width'] = 250, ['height'] = 250, ['font_size'] = 200}
-            object.createButton(p)
-            offset = offset + 0.5
-        end
-        offset = 0
-        for i,num in ipairs({2,3,4,5,6,7,8,9,10}) do
-            local p = {['click_function'] = 'Action_SetPS'..num, ['label'] = num..'PS', ['position'] = {1.5, 0.5, -1.3 + offset}, ['rotation'] =  {0, 0, 0}, ['width'] = 300, ['height'] = 200, ['font_size'] = 150}
-            object.createButton(p)
-            offset = offset + 0.3125
-        end
-        local p = {['click_function'] = 'Action_setup', ['label'] = 'Setup', ['position'] = {0, 0.5, -0.2}, ['rotation'] =  {0, 0, 0}, ['width'] = 450, ['height'] = 200, ['font_size'] = 180}
+        local p = {['click_function'] = 'Action_presetup', ['label'] = 'Pre-Setup', ['position'] = {0, 0.5, -1.0}, ['rotation'] =  {0, 0, 0}, ['width'] = 800, ['height'] = 200, ['font_size'] = 180}
+        object.createButton(p)
+        local p = {['click_function'] = 'Action_setupclear', ['label'] = 'Clear', ['position'] = {0, 0.5, -0.2}, ['rotation'] =  {0, 0, 0}, ['width'] = 800, ['height'] = 200, ['font_size'] = 180}
         object.createButton(p)
     end
 end
@@ -2735,10 +2720,32 @@ local asteroid_min_y = -9.2
 local asteroid_max_y = 9.2
 local num_asteroids = 6
 local num_debris = 0
+local card_to_clear
+function Action_presetup(object)
+    CountPlayers()
+    CalculatePlayerSkill()
+    --BAD
+    --object.clearButtons()
+
+    local offset = 0
+    for i,num in ipairs({1,2,3,4,5,6}) do
+        local p = {['click_function'] = 'Action_SetPlayer'..num, ['label'] = num..'P', ['position'] = {-1.5, 0.5, -1.3 + offset}, ['rotation'] =  {0, 0, 0}, ['width'] = 250, ['height'] = 250, ['font_size'] = 200}
+        object.createButton(p)
+        offset = offset + 0.5
+    end
+    offset = 0
+    for i,num in ipairs({2,3,4,5,6,7,8,9,10}) do
+        local p = {['click_function'] = 'Action_SetPS'..num, ['label'] = num..'PS', ['position'] = {1.5, 0.5, -1.3 + offset}, ['rotation'] =  {0, 0, 0}, ['width'] = 300, ['height'] = 200, ['font_size'] = 150}
+        object.createButton(p)
+        offset = offset + 0.3125
+    end
+    local p = {['click_function'] = 'Action_setup', ['label'] = 'Setup', ['position'] = {0, 0.5, -0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 800, ['height'] = 200, ['font_size'] = 180}
+    object.createButton(p)
+end
 function CountPlayers()
     local count = 0
     for i,ship in ipairs(getAllObjects()) do
-        if ship.tag == 'Figurine' and not isAi(ship) and getSkill(ship) ~= nil then
+        if ship.tag == 'Figurine' and not isAi(ship) and getSkill(ship) ~= nil and isInPlay(ship) then
             count = count + 1
             printToAll("Found: "..ship.getName(),{0,1,1})
         end
@@ -2751,7 +2758,7 @@ function CalculatePlayerSkill()
     local count = 0
     local ps = 0
     for i,ship in ipairs(getAllObjects()) do
-        if ship.tag == 'Figurine' and not isAi(ship) and getSkill(ship) ~= nil then
+        if ship.tag == 'Figurine' and not isAi(ship) and getSkill(ship) ~= nil and isInPlay(ship) then
             count = count + 1
             ps = ps + getSkill(ship)
         end
@@ -2761,9 +2768,27 @@ function CalculatePlayerSkill()
     mission_ps = avg_ps
     return avg_ps
 end
+function Action_setupclear(object)
+    for i,obj in ipairs(getAllObjects()) do
+        local pos = obj.getPosition()
+        --is in play or ai setup
+        if pos[1]>-16.5 and pos[3]>-16.5 and pos[3]<16.5 then
+            --is AI, card, or damage marker
+            if isAi(obj) or obj.tag=="Card" or obj.tag=="Deck" or obj.tag=="Chip" or obj.getName():match "Asteroid"or obj.getName():match "Debrisfield" then
+                obj.destruct()
+            --is player
+            elseif not isAi(obj) and isShip(obj) and getSkill(obj)~=nil then
+                local newpos = obj.getPosition()
+                obj.setPosition({newpos[1],newpos[2],-16})
+                obj.setRotation({0,180,0})
+                obj.unlock()
+            end
+        end
+    end
+end
 function Action_setup(object)
-    CountPlayers()
-    CalculatePlayerSkill()
+    --BAD
+    --object.clearButtons()
     if mission_ps == nil or mission_players == nil then
         printToAll("Must select Number of players and Average Player Skill", {1,0,0})
     else
@@ -3133,10 +3158,10 @@ function spawnAllAsteroidsCoroutine()
         params.callback_owner = Global
         local callback_params = {}
         local state = i_roll
-        callback_params['index'] = i
+        callback_params['index'] = num_asteroids+i
         callback_params['state'] = state
         params.params = callback_params
-        asteroids[i] = debris_source.takeObject(params)
+        asteroids[num_asteroids+i] = debris_source.takeObject(params)
         printToAll("Spawned Asteroid (Debris "..i_roll..") at {"..round(params.position[1],2)..",0,"..round(params.position[3],2).."}",{0,1,0})
         for i=1, 20, 1 do
             coroutine.yield(0)
@@ -3160,7 +3185,7 @@ function findClearPosition()
 end
 function isClear(pos)
     for i,asteroid in ipairs(getAllObjects()) do
-       if asteroid.getName():match ".*Asteroid.*" or asteroid.getName():match ".*DebrisField.*" then
+       if asteroid.getName():match "Asteroid" or asteroid.getName():match "DebrisField" then
            local astpos = asteroid.getPosition()
            if distance(pos[1],pos[3],astpos[1],astpos[3])<5.5 then return false end
        end
