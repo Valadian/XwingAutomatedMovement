@@ -1297,12 +1297,16 @@ function Render_ButtonState(object)
                     Render_AiFreeFocusEvade(object)
                     Render_AiFreeTargetLock(object)
                 end
+                if getAiType(object)=="PHA" then
+                    Render_AiDecloak(object)
+                end
                 local movebutton = {['click_function'] = 'Action_AiMove', ['label'] = label, ['position'] = {0, 0.3, -0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 750, ['height'] = 550, ['font_size'] = 250}
                 object.createButton(movebutton)
                 if isAi(object) and getAiSquad(object)~=nil and squadmove[getAiSquad(object)]~=nil then
                     local squadbutton = {['click_function'] = 'Action_AiSquad', ['label'] = 'Squad', ['position'] = {0, 0.3, 0.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 750, ['height'] = 550, ['font_size'] = 250}
                     object.createButton(squadbutton)
                 end
+                local skipbutton = {['click_function'] = 'Action_AiSkip', ['label'] = "Skip", ['position'] = {0, 0.3, -1.2}, ['rotation'] =  {0, 0, 0}, ['width'] = 750, ['height'] = 550, ['font_size'] = 250}
             end
         elseif object==current then
             State_AIMove(object)
@@ -1311,6 +1315,9 @@ function Render_ButtonState(object)
         Render_Ruler(object)
         Render_AttackButton(object)
     end
+end
+function Action_AiSkip(object)
+    object.setDescription("ai next")
 end
 function Render_Swerves(object)
     Render_SwerveLeft(object)
@@ -1749,7 +1756,8 @@ function Action_Activation()
     current = first
     if first ~=nil then
         findAiTarget(first.getGUID())
-        State_AIMove(first)
+        --State_AIMove(first)
+        Render_ButtonState(first)
     end
     UpdateNote(MoveSort, nil)
 end
@@ -1843,7 +1851,8 @@ end
 function isTemporary(object)
     local name = object.getName()
     local desc = object.getDescription()
-    return (name=="Evade" or name=="Focus" or name=="Weapon Disabled" or name=="Reinforce" or desc=="Red TL") and desc~="keep"
+    local tag = object.tag
+    return (name=="Evade" or name=="Focus" or name=="Weapon Disabled" or name=="Reinforce" or desc=="Red TL" or tag =="Dice") and desc~="keep"
 end
 function Render_AttackButton(object)
 
@@ -2237,7 +2246,7 @@ end
 
 function Render_AiDecloak(object)
     if aidecloaked[object.getGUID()]==nil then
-        local decloak = {['click_function'] = 'Action_AiDecloak', ['label'] = 'decloak', ['position'] = {0, 0.3, -1.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 1000, ['height'] = 300, ['font_size'] = 250}
+        local decloak = {['click_function'] = 'Action_AiDecloak', ['label'] = 'decloak', ['position'] = {0, 0.3, -1.9}, ['rotation'] =  {0, 0, 0}, ['width'] = 1000, ['height'] = 300, ['font_size'] = 250}
         object.createButton(decloak)
     end
 end
@@ -2680,6 +2689,7 @@ ELITE_ICON = "http://i.imgur.com/n9dywTO.png"
 
 core_source = nil
 tfa_source = nil
+debris_source = nil
 r1 = 3.75
 v = {
     _0000 = {x=0, y=4.5, rot=180}, --N
@@ -2724,7 +2734,36 @@ local asteroid_max_x = 9.2
 local asteroid_min_y = -9.2
 local asteroid_max_y = 9.2
 local num_asteroids = 6
+local num_debris = 0
+function CountPlayers()
+    local count = 0
+    for i,ship in ipairs(getAllObjects()) do
+        if ship.tag == 'Figurine' and not isAi(ship) and getSkill(ship) ~= nil then
+            count = count + 1
+            printToAll("Found: "..ship.getName(),{0,1,1})
+        end
+    end
+    printToAll("Total Players: "..count,{0,1,1})
+    mission_players = count
+    return count
+end
+function CalculatePlayerSkill()
+    local count = 0
+    local ps = 0
+    for i,ship in ipairs(getAllObjects()) do
+        if ship.tag == 'Figurine' and not isAi(ship) and getSkill(ship) ~= nil then
+            count = count + 1
+            ps = ps + getSkill(ship)
+        end
+    end
+    local avg_ps = round(ps/count)
+    printToAll("Average Pilot Skill: "..avg_ps,{0,1,1})
+    mission_ps = avg_ps
+    return avg_ps
+end
 function Action_setup(object)
+    CountPlayers()
+    CalculatePlayerSkill()
     if mission_ps == nil or mission_players == nil then
         printToAll("Must select Number of players and Average Player Skill", {1,0,0})
     else
@@ -2741,6 +2780,7 @@ function Action_setup(object)
         asteroid_min_y = -9.2
         asteroid_max_y = 9.2
         num_asteroids = 0
+        num_debris = 0
         local rule_page
         local turns = 12
         printToAll("Setting up: "..mission, {0,1,0})
@@ -2932,6 +2972,7 @@ function Action_setup(object)
         if mission == "Nobody Home" then
             turns = 10
             num_asteroids = 6
+            num_debris = 6
             asteroid_min_x = -9.2 - r1
             asteroid_max_x = 9.2 + r1
             asteroid_min_y = -9.2 - r1
@@ -3055,8 +3096,10 @@ function spawnAllAsteroidsCoroutine()
     asteroids = {}
     local core_source = findObjectByNameAndType("Core Set Asteroids","Infinite")
     local tfa_source = findObjectByNameAndType("TFA Set Asteroids","Infinite")
+    local debris_source = findObjectByNameAndType("Debris Fields","Infinite")
     for i=1,num_asteroids,1 do
-        local i_roll = math.random(12)
+        local i_source = math.random(2)
+        local i_roll = math.random(6)
         local params = {}
         --local x = asteroid_min_x + (asteroid_max_x - asteroid_min_x)*math.random()
         --local y = asteroid_min_y + (asteroid_max_y - asteroid_min_y)*math.random()
@@ -3064,19 +3107,37 @@ function spawnAllAsteroidsCoroutine()
         params.rotation = {0,math.random(360),0}
         params.callback = 'setAsteroidState'
         params.callback_owner = Global
-        local callback_params = {}
-        local state = mod(i_roll-1,6)+1
-        callback_params['index'] = i
-        callback_params['state'] = state
-        params.params = callback_params
-        if i_roll<7 then
+--        local callback_params = {}
+--        --local state = mod(i_roll-1,6)+1
+--        callback_params['index'] = i
+--        callback_params['state'] = i_roll
+        params.params = {index = i, state = i_roll}
+        if i_roll==1 then
             asteroids[i] = core_source.takeObject(params)
         else
             asteroids[i] = tfa_source.takeObject(params)
         end
         local type = "Core"
-        if i_roll>6 then type="TFA" end
-        printToAll("Spawned Asteroid ("..type.." "..state..") at {"..round(params.position[1],2)..",0,"..round(params.position[3],2).."}",{0,1,0})
+        if i_roll==2 then type="TFA" end
+        printToAll("Spawned Asteroid ("..type.." "..i_roll..") at {"..round(params.position[1],2)..",0,"..round(params.position[3],2).."}",{0,1,0})
+        for i=1, 20, 1 do
+            coroutine.yield(0)
+        end
+    end
+    for i=1,num_debris,1 do
+        local i_roll = math.random(6)
+        local params = {}
+        params.position = findClearPosition()
+        params.rotation = {0,math.random(360),0}
+        params.callback = 'setAsteroidState'
+        params.callback_owner = Global
+        local callback_params = {}
+        local state = i_roll
+        callback_params['index'] = i
+        callback_params['state'] = state
+        params.params = callback_params
+        asteroids[i] = debris_source.takeObject(params)
+        printToAll("Spawned Asteroid (Debris "..i_roll..") at {"..round(params.position[1],2)..",0,"..round(params.position[3],2).."}",{0,1,0})
         for i=1, 20, 1 do
             coroutine.yield(0)
         end
@@ -3089,7 +3150,7 @@ function findClearPosition()
     for i=1, tries, 1 do
         local x = asteroid_min_x + (asteroid_max_x - asteroid_min_x)*math.random()
         local y = asteroid_min_y + (asteroid_max_y - asteroid_min_y)*math.random()
-        pos = {x,0,y}
+        pos = {x,1,y}
         if isClear(pos) then
             return pos
         end
@@ -3099,7 +3160,7 @@ function findClearPosition()
 end
 function isClear(pos)
     for i,asteroid in ipairs(getAllObjects()) do
-       if asteroid.getName():match "Asteroid.*" then
+       if asteroid.getName():match ".*Asteroid.*" or asteroid.getName():match ".*DebrisField.*" then
            local astpos = asteroid.getPosition()
            if distance(pos[1],pos[3],astpos[1],astpos[3])<5.5 then return false end
        end
