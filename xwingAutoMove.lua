@@ -21,91 +21,35 @@ evade = nil --'4a352e'
 stress = nil --'a25e12'
 target = nil --'5bd82a'
 enemy_target_locks = nil
-
--- AI
-aitype = {}
-striketarget = nil
--- aicardguid = '2d84be'
-squadleader = {}
-squadmove = {}
-squadposition = {}
-squadrotation = {}
-aimove = {}
-aiswerved = {}
-airollboosted = {}
-aitargets = {}
-aistressed = {}
-aidecloaked = {}
--- Auto Setup
-missionzone = '6fef74'
-mission_ps = nil
-mission_players = nil
-players_up_next = {}
-players_up_next_delay = 0
-ai_stress = false
-ai_stress_delay = 0
-current = nil
-currentphase = nil
-turn_marker = nil
-end_marker = nil
 freshLock = nil
 
+ignorePlayerCheck = true
+
 function onload()
-    --local aicard = getObjectFromGUID(aicardguid)
-    local aicard = findObjectByName("AI Action Card")
-    local endturn = findObjectByName("End Turn")
-    if aicard~=nil then
-        local prebutton = {['click_function'] = 'Action_PlanningPhase', ['label'] = 'Planning', ['position'] = {0, 0.3, -1.5}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 400, ['font_size'] = 250}
-        aicard.createButton(prebutton)
-
-        local flipbutton = {['click_function'] = 'Action_MovePhase', ['label'] = 'Activation', ['position'] = {0, 0.3, -0.5}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 400, ['font_size'] = 250}
-        aicard.createButton(flipbutton)
-
-        local attackbutton = {['click_function'] = 'Action_AttackPhase', ['label'] = 'Combat', ['position'] = {0, 0.3, 0.5}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 400, ['font_size'] = 250}
-        aicard.createButton(attackbutton)
-
-        local clearbutton = {['click_function'] = 'Action_EndPhase', ['label'] = 'End', ['position'] = {0, 0.3, 1.5}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 400, ['font_size'] = 250}
-        aicard.createButton(clearbutton)
-    end
-    if endturn~=nil then
-
-        local clearbutton = {['click_function'] = 'Action_EndPhase', ['label'] = 'End', ['position'] = {0, -0.1, 0}, ['rotation'] =  {180, 225, 0}, ['width'] = 500, ['height'] = 500, ['font_size'] = 250}
-        endturn.createButton(clearbutton)
-    end
-    turn_marker = findObjectByName("Turn Marker")
-    end_marker = findObjectByName("End Marker")
     enemy_target_locks = findObjectByNameAndType("Enemy Target Locks", "Infinite")
     focus = findObjectByNameAndType("Focus", "Infinite")
     evade = findObjectByNameAndType("Evade", "Infinite")
     stress = findObjectByNameAndType("Stress", "Infinite")
     target = findObjectByNameAndType("Target Lock", "Infinite")
-end
-function findObjectByName(name)
-    for i,obj in ipairs(getAllObjects()) do
-        if obj.getName()==name then return obj end
-    end
-end
-function findObjectByNameAndType(name, type)
-    for i,obj in ipairs(getAllObjects()) do
-        if obj.getName()==name and obj.tag == type then return obj end
-    end
+    --VALADIAN ONLOAD
+    onload_ai()
 end
 function PlayerCheck(Color, GUID)
-    return true
---    local PC = false
---    if getPlayer(Color) ~= nil then
---        HandPos = getPlayer(Color).getPointerPosition()
---        DialPos = getObjectFromGUID(GUID).getPosition()
---        if distance(HandPos['x'],HandPos['z'],DialPos['x'],DialPos['z']) < 2 then
---            PC = true
---        end
---    end
---    return PC
+    --VALADIAN IGNORE PLAYER CHECK
+    if ignorePlayerCheck then return true end
+    local PC = false
+    if getPlayer(Color) ~= nil then
+        HandPos = getPlayer(Color).getPointerPosition()
+        DialPos = getObjectFromGUID(GUID).getPosition()
+        if distance(HandPos['x'],HandPos['z'],DialPos['x'],DialPos['z']) < 2 then
+            PC = true
+        end
+    end
+    return PC
 end
 function onObjectLeaveScriptingZone(zone, object)
-    if zone.getGUID() == missionzone and object.tag == 'Card' and object.getName():match '^Mission: (.*)' then
-        object.clearButtons()
-    end
+    --VALADIAN MISSION ZONE HANDLING
+    onObjectLeaveScriptingZone_ai(zone,object)
     if object.tag == 'Card' and object.getDescription() ~= '' then
         local CardData = dialpositions[CardInArray(object.GetGUID())]
         if CardData ~= nil then
@@ -532,33 +476,21 @@ function update ()
             local shipname = ship.getName()
             checkname(shipguid,shipdesc,shipname)
             check(shipguid,shipdesc)
-        elseif ship.getName():match "Turbolaser.*" and (ship.getDescription()=="r" or ship.getDescription()=="ruler") then
-            ruler(ship.getGUID())
         end
         if ship.getVar('Lock') == true and ship.held_by_color == nil and ship.resting == true then
             ship.setVar('Lock',false)
             ship.lock()
         end
     end
-
-    UpdatePlanningNote()
-end
-
-function round(x)
-    return x>=0 and math.floor(x+0.5) or math.ceil(x-0.5)
-end
-
-function round(num, idp)
-    if num == nil then return nil end
-    local mult = 10^(idp or 0)
-    if num >= 0 then return math.floor(num * mult + 0.5) / mult
-    else return math.ceil(num * mult - 0.5) / mult end
+    --VALADIAN AI handling
+    update_ai()
 end
 
 function take(parent, guid, xoff, yoff, zoff, TL, color, name)
     local obj = getObjectFromGUID(guid)
     local objp = getObjectFromGUID(parent)
     local world = obj.getPosition()
+    --VALADIAN Rotate Take to be relative position
     local offset = RotateVector({xoff, yoff, zoff}, obj.getRotation()[2])
     local params = {}
     params.position = {world[1]+offset[1], world[2]+offset[2], world[3]+offset[3]}
@@ -701,86 +633,6 @@ function check(guid,move)
         resetdials(guid, 1)
     end
 
-    -- AI Commands
-    if move == 'ai' then
-        auto(guid)
-    end
-    if move == 'ai strike' then
-        aitype[guid] = 'strike'
-        local ship = getObjectFromGUID(guid)
-        printToAll('AI Type For: ' .. ship.getName() .. ' set to STRIKE',{0, 1, 0})
-        setpending(guid)
-    end
-    if move == 'ai attack' then
-        aitype[guid] = nil
-        local ship = getObjectFromGUID(guid)
-        printToAll('AI Type For: ' .. ship.getName() .. ' set to ATTACK',{0, 1, 0})
-        setpending(guid)
-    end
-    if move:match 'ai flee (%a)' then
-        local direction = string.lower(move:match 'ai flee (%a)')
-        if contains({'e','s','n','w'},direction) then
-            aitype[guid] = 'flee_'..direction
-            local ship = getObjectFromGUID(guid)
-            printToAll('AI Type For: ' .. ship.getName() .. ' set to FLEE',{0, 1, 0})
-        else
-            printToAll("'"..direction.."' is invalid direction for AI FLEE command {E, S, W, N}",{1, 0, 0})
-        end
-        setpending(guid)
-    end
-    if move == 'ai striketarget' or
-       move == 'ai target' then
-        striketarget = guid
-        local ship = getObjectFromGUID(guid)
-        printToAll('Strike Target Set: ' .. ship.getName(),{0.2, 0.2, 0.8})
-        setpending(guid)
-    end
-    if move:match "ai target (.*)"~=nil then
-        local target = move:match "ai target (.*)"
-        if target == "clear" then
-            aitargets[guid] = nil
-            printToAll('Cleared target for AI',{0, 1, 0})
-        else
-            local players = {}
-            for i,ship in ipairs(getAllObjects()) do
-                local matches = string.match(ship.getName(),target)
-                if not isAi(ship) and isShip(ship) and isInPlay(ship) and matches then
-                    table.insert(players, ship)
-                end
-            end
-            if not empty(players) then
-                aitargets[guid] = players[1]
-                printToAll('Set target for AI to: ' .. players[1].getName(),{0, 1, 0})
-            end
-        end
-        if currentphase~=nil then
-            local currentGuid
-            if current~= nil then currentGuid = current.getGUID() end
-            UpdateNote(currentphase, currentGuid)
-        end
-        setpending(guid)
-    end
-    if move == "ai pos" then
-        local ship = getObjectFromGUID(guid)
-        printToAll('Position '..ship.getPosition()[1].." "..ship.getPosition()[2].." "..ship.getPosition()[3],{0,1,0})
-    end
-    if move == "ai next" then
-        if currentphase == MoveSort then
-            local ship = getObjectFromGUID(guid)
-            GoToNextMove(ship)
-        elseif currentphase == AttackSort then
-            Action_AiAttack(ship)
-        end
-        setpending(guid)
-    end
-    if move == "ai stress true" or move == "ai stress" then
-        aistressed[guid] = true
-        setpending(guid)
-    end
-    if move == "ai stress false" or move == "ai stress clear" then
-        aistressed[guid] = nil
-        setpending(guid)
-    end
     -- Straight Commands
     if move == 's0' then
         notify(guid,move,'is stationary')
@@ -968,11 +820,9 @@ function check(guid,move)
     elseif move == 'undo' or move == 'q' then
         undo(guid)
         notify(guid,'q')
-    elseif string.starts(move,"q ") then
-        local nextmove = string.gsub(move,"q ","")
-        undo(guid)
-        executeMove(getObjectFromGUID(guid),nextmove)
     end
+    --VALADIAN AI COMMANDS
+    check_ai(guid, move)
 --    if not empty(players_up_next) then
 --        if players_up_next_delay>100 then
 --            for i,ship in ipairs(players_up_next) do
@@ -996,9 +846,6 @@ function check(guid,move)
 --            ai_stress_delay = ai_stress_delay + 1
 --        end
 --    end
-end
-function string.starts(String,Start)
-    return string.sub(String,1,string.len(Start))==Start
 end
 
 function checkpos(guid)
@@ -1027,6 +874,7 @@ function ruler(guid,action)
     local direction = shipobject.getRotation()
     local world = shipobject.getPosition()
     local scale = shipobject.getScale()
+    --VALADIAN TURBOLASER RULER
     -- Turbolaser models are not scaled correctly. hack it.
     if shipname:match 'Turbolaser.*' then
         local s = 0.6327
@@ -1063,6 +911,7 @@ end
 function actionButton(object)
     object.destruct()
     local ship = findNearestShip(object.getPosition())
+    --VALADIAN REDRAW BUTTON STATE
     Render_ButtonState(ship)
 end
 
@@ -1148,6 +997,162 @@ function left(guid,forwardDistance,sidewaysDistance,rotate,bsfd,bssd)
     obj.Rotate({0, rotate, 0})
 end
 
+
+-------------------------------------------------------------------
+---- START VALADIAN'S AI CODE
+-------------------------------------------------------------------
+
+-- AI
+aitype = {}
+striketarget = nil
+-- aicardguid = '2d84be'
+squadleader = {}
+squadmove = {}
+squadposition = {}
+squadrotation = {}
+aimove = {}
+aiswerved = {}
+airollboosted = {}
+aitargets = {}
+aistressed = {}
+aidecloaked = {}
+-- Auto Setup
+missionzone = '6fef74'
+mission_ps = nil
+mission_players = nil
+players_up_next = {}
+players_up_next_delay = 0
+ai_stress = false
+ai_stress_delay = 0
+current = nil
+currentphase = nil
+turn_marker = nil
+end_marker = nil
+function onload_ai()
+    local aicard = findObjectByName("AI Action Card")
+    local endturn = findObjectByName("End Turn")
+    if aicard~=nil then
+        local prebutton = {['click_function'] = 'Action_Planning', ['label'] = 'Planning', ['position'] = {0, 0.3, -1.5}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 400, ['font_size'] = 250}
+        aicard.createButton(prebutton)
+
+        local flipbutton = {['click_function'] = 'Action_Activation', ['label'] = 'Activation', ['position'] = {0, 0.3, -0.5}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 400, ['font_size'] = 250}
+        aicard.createButton(flipbutton)
+
+        local attackbutton = {['click_function'] = 'Action_Combat', ['label'] = 'Combat', ['position'] = {0, 0.3, 0.5}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 400, ['font_size'] = 250}
+        aicard.createButton(attackbutton)
+
+        local clearbutton = {['click_function'] = 'Action_End', ['label'] = 'End', ['position'] = {0, 0.3, 1.5}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 400, ['font_size'] = 250}
+        aicard.createButton(clearbutton)
+    end
+    if endturn~=nil then
+
+        local clearbutton = {['click_function'] = 'Action_End', ['label'] = 'End', ['position'] = {0, -0.1, 0}, ['rotation'] =  {180, 225, 0}, ['width'] = 500, ['height'] = 500, ['font_size'] = 250}
+        endturn.createButton(clearbutton)
+    end
+    turn_marker = findObjectByName("Turn Marker")
+    end_marker = findObjectByName("End Marker")
+end
+function update_ai()
+    for i,ship in ipairs(getAllObjects()) do
+        if ship.getName():match "Turbolaser.*" and (ship.getDescription()=="r" or ship.getDescription()=="ruler") then
+            ruler(ship.getGUID())
+        end
+    end
+    UpdatePlanningNote()
+end
+function check_ai (guid, move)
+
+    -- AI Commands
+    if move == 'ai' then
+        auto(guid)
+    end
+    if move == 'ai strike' then
+        aitype[guid] = 'strike'
+        local ship = getObjectFromGUID(guid)
+        printToAll('AI Type For: ' .. ship.getName() .. ' set to STRIKE',{0, 1, 0})
+        setpending(guid)
+    end
+    if move == 'ai attack' then
+        aitype[guid] = nil
+        local ship = getObjectFromGUID(guid)
+        printToAll('AI Type For: ' .. ship.getName() .. ' set to ATTACK',{0, 1, 0})
+        setpending(guid)
+    end
+    if move:match 'ai flee (%a)' then
+        local direction = string.lower(move:match 'ai flee (%a)')
+        if contains({'e','s','n','w'},direction) then
+            aitype[guid] = 'flee_'..direction
+            local ship = getObjectFromGUID(guid)
+            printToAll('AI Type For: ' .. ship.getName() .. ' set to FLEE',{0, 1, 0})
+        else
+            printToAll("'"..direction.."' is invalid direction for AI FLEE command {E, S, W, N}",{1, 0, 0})
+        end
+        setpending(guid)
+    end
+    if move == 'ai striketarget' or
+            move == 'ai target' then
+        striketarget = guid
+        local ship = getObjectFromGUID(guid)
+        printToAll('Strike Target Set: ' .. ship.getName(),{0.2, 0.2, 0.8})
+        setpending(guid)
+    end
+    if move:match "ai target (.*)"~=nil then
+        local target = move:match "ai target (.*)"
+        if target == "clear" then
+            aitargets[guid] = nil
+            printToAll('Cleared target for AI',{0, 1, 0})
+        else
+            local players = {}
+            for i,ship in ipairs(getAllObjects()) do
+                local matches = string.match(ship.getName(),target)
+                if not isAi(ship) and isShip(ship) and isInPlay(ship) and matches then
+                    table.insert(players, ship)
+                end
+            end
+            if not empty(players) then
+                aitargets[guid] = players[1]
+                printToAll('Set target for AI to: ' .. players[1].getName(),{0, 1, 0})
+            end
+        end
+        if currentphase~=nil then
+            local currentGuid
+            if current~= nil then currentGuid = current.getGUID() end
+            UpdateNote(currentphase, currentGuid)
+        end
+        setpending(guid)
+    end
+    if move == "ai pos" then
+        local ship = getObjectFromGUID(guid)
+        printToAll('Position '..ship.getPosition()[1].." "..ship.getPosition()[2].." "..ship.getPosition()[3],{0,1,0})
+    end
+    if move == "ai next" then
+        if currentphase == MoveSort then
+            local ship = getObjectFromGUID(guid)
+            GoToNextMove(ship)
+        elseif currentphase == AttackSort then
+            Action_AiAttack(ship)
+        end
+        setpending(guid)
+    end
+    if move == "ai stress true" or move == "ai stress" then
+        aistressed[guid] = true
+        setpending(guid)
+    end
+    if move == "ai stress false" or move == "ai stress clear" then
+        aistressed[guid] = nil
+        setpending(guid)
+    end
+    if string.starts(move,"q ") then
+        local nextmove = string.gsub(move,"q ","")
+        undo(guid)
+        executeMove(getObjectFromGUID(guid),nextmove)
+    end
+end
+function onObjectLeaveScriptingZone_ai(zone, object)
+    if zone.getGUID() == missionzone and object.tag == 'Card' and object.getName():match '^Mission: (.*)' then
+        object.clearButtons()
+    end
+end
 function auto(guid)
     local ai = getObjectFromGUID(guid)
     --local tgtGuid
@@ -1709,12 +1714,12 @@ function RotateVector(direction, yRotation)
     return {xDistance, direction[2], zDistance}
 end
 start_delay = ""
-function Action_PlanningPhase()
+function Action_Planning()
     start_delay = ""
     currentphase = PlanningSort
     UpdatePlanningNote()
 end
-function Action_MovePhase()
+function Action_Activation()
     -- printToAll("*****************************",{0,1,1})
     -- printToAll("STARTING ACTIVATION PHASE",{0,1,1})
     -- printToAll("*****************************",{0,1,1})
@@ -1755,7 +1760,7 @@ function Action_ClearAi()
         end
     end -- [end loop for all ships]
 end
-function Action_AttackPhase()
+function Action_Combat()
     -- printToAll("**************************",{0,1,1})
     -- printToAll("STARTING COMBAT PHASE",{0,1,1})
     -- printToAll("**************************",{0,1,1})
@@ -1779,7 +1784,7 @@ end
 --    end
 --end
 
-function Action_EndPhase()
+function Action_End()
     for i,obj in ipairs(getAllObjects()) do
         if isInPlay(obj) and isTemporary(obj) then
             obj.destruct()
@@ -1804,7 +1809,7 @@ function delayPlanning()
     for i=1, 50, 1 do
         coroutine.yield(0)
     end
-    Action_PlanningPhase()
+    Action_Planning()
     return true
 end
 turn_marker_warning = false
@@ -1946,7 +1951,7 @@ function delayActivation()
         end
     end
     if total == ready then
-        Action_MovePhase()
+        Action_Activation()
     end
     activation_started = false
 
@@ -2129,7 +2134,7 @@ function GoToNextMove(object)
         UpdateNote(MoveSort, next.getGUID())
     else
         UpdateNote(MoveSort, nil, true)
-        Action_AttackPhase()
+        Action_Combat()
     end
     for i,ship in ipairs(getAllObjects()) do
         if isAi(ship) and ship.getGUID()~=object.getGUID() then
@@ -2197,15 +2202,16 @@ function Action_AiUndoBoostBarrel(object)
     object.clearButtons()
     object.setDescription("q")
     airollboosted[object.getGUID()]=nil
-    Render_Ruler(object)
-
-    if getAiHasBoost(object) then
-        Render_Boost(object)
-    end
-
-    if getAiHasBarrelRoll(object) then
-        Render_BarrelRoll(object)
-    end
+    Render_ButtonState(object)
+--    Render_Ruler(object)
+--
+--    if getAiHasBoost(object) then
+--        Render_Boost(object)
+--    end
+--
+--    if getAiHasBarrelRoll(object) then
+--        Render_BarrelRoll(object)
+--    end
 end
 
 function Render_Ruler(object)
@@ -2375,7 +2381,8 @@ end
 
 function Action_TargetLock(object)
     local target = findAiTarget(object.getGUID())
-    if target~=nil then
+    local dist = realDistance(target.getGUID(),object.getGUID())
+    if target~=nil and dist<10.9 then
         take(enemy_target_locks.getGUID(), target.getGUID(),0.37,1,-0.37,true,"Red",getSimpleAiName(object))
         notify(object.getGUID(),'action','acquires a target lock')
     else
@@ -3253,4 +3260,28 @@ function updateCard(object, params)
     local card = cards[params.shipnum]
     printToAll("Drawing card "..params.name.."#"..tostring(params.shipnum),{0,1,0})
     card.setName(params.name.."#"..tostring(params.shipnum))
+end
+function string.starts(String,Start)
+    return string.sub(String,1,string.len(Start))==Start
+end
+function findObjectByName(name)
+    for i,obj in ipairs(getAllObjects()) do
+        if obj.getName()==name then return obj end
+    end
+end
+function findObjectByNameAndType(name, type)
+    for i,obj in ipairs(getAllObjects()) do
+        if obj.getName()==name and obj.tag == type then return obj end
+    end
+end
+
+function round(x)
+    return x>=0 and math.floor(x+0.5) or math.ceil(x-0.5)
+end
+
+function round(num, idp)
+    if num == nil then return nil end
+    local mult = 10^(idp or 0)
+    if num >= 0 then return math.floor(num * mult + 0.5) / mult
+    else return math.ceil(num * mult - 0.5) / mult end
 end
