@@ -1,7 +1,8 @@
 -- X-Wing Automatic Movement - Hera Verito (Jstek), March 2016
 -- X-Wing Arch and Range Ruler - Flolania, March 2016
 -- X-Wing Auto Dial Integration - Flolania, March 2016
--- X-Wing AI Auto movement - Valadian, April 2016
+-- X-Wing Auto Tokens - Hera Verito (Jstek), March 2016
+-- X-Wing Auto Bump Rewrite of Movement Code - Flolania, May 2016
 
 --Auto Movement
 undolist = {}
@@ -11,42 +12,30 @@ namelist1 = {}
 locktimer = {}
 
 --Auto Dials
---dial information
 dialpositions = {}
-CardData = nil
+
+--Collider Infomation
+BigShipList = {'https://paste.ee/r/LIxnJ','https://paste.ee/r/v9OYL','https://paste.ee/r/XoXqn','https://paste.ee/r/oOjRN','https://paste.ee/r/v8OYL','https://paste.ee/r/xBpMo','https://paste.ee/r/k4DLM','https://paste.ee/r/JavTd','http://pastebin.com/Tg5hdRTM'}
 
 -- Auto Actions
+enemy_target_locks = nil
 focus = nil --'beca0f'
 evade = nil --'4a352e'
 stress = nil --'a25e12'
-target = nil --'5bd82a'
-enemy_target_locks = nil
-freshLock = nil
+target = nil --'c81580'
 
 ignorePlayerCheck = true
 
 function onload()
-    enemy_target_locks = findObjectByNameAndType("Enemy Target Locks", "Infinite")
-    focus = findObjectByNameAndType("Focus", "Infinite")
-    evade = findObjectByNameAndType("Evade", "Infinite")
-    stress = findObjectByNameAndType("Stress", "Infinite")
-    target = findObjectByNameAndType("Target Lock", "Infinite")
-    --VALADIAN ONLOAD
-    onload_ai()
-end
-function PlayerCheck(Color, GUID)
+    enemy_target_locks = findObjectByNameAndType("Enemy Target Locks", "Infinite").getGUID()
+    focus = findObjectByNameAndType("Focus", "Infinite").getGUID()
+    evade = findObjectByNameAndType("Evade", "Infinite").getGUID()
+    stress = findObjectByNameAndType("Stress", "Infinite").getGUID()
+    target = findObjectByNameAndType("Target Lock", "Infinite").getGUID()
     --VALADIAN IGNORE PLAYER CHECK
     if ignorePlayerCheck then return true end
-    local PC = false
-    if getPlayer(Color) ~= nil then
-        HandPos = getPlayer(Color).getPointerPosition()
-        DialPos = getObjectFromGUID(GUID).getPosition()
-        if distance(HandPos['x'],HandPos['z'],DialPos['x'],DialPos['z']) < 2 then
-            PC = true
-        end
-    end
-    return PC
 end
+
 function onObjectLeaveScriptingZone(zone, object)
     --VALADIAN MISSION ZONE HANDLING
     onObjectLeaveScriptingZone_ai(zone,object)
@@ -55,10 +44,9 @@ function onObjectLeaveScriptingZone(zone, object)
         if CardData ~= nil then
             local obj = getObjectFromGUID(CardData["ShipGUID"])
             if obj.getVar('HasDial') == true then
-                printToColor(CardData["ShipName"] .. ' already has a dial.', object.held_by_color, {0.2, 0.2, 0.8})
+                printToColor(CardData["ShipName"] .. ' already has a dial.', object.held_by_color, {0.2,0.2,0.8})
             else
                 obj.setVar('HasDial', true)
-                obj.setVar('Maneuver', object.getDescription())
                 CardData["Color"] = object.held_by_color
 
                 local flipbutton = {['click_function'] = 'CardFlipButton', ['label'] = 'Flip', ['position'] = {0, -1, 1}, ['rotation'] =  {0, 0, 180}, ['width'] = 750, ['height'] = 550, ['font_size'] = 250}
@@ -69,9 +57,23 @@ function onObjectLeaveScriptingZone(zone, object)
                 object.setVar('Lock',true)
             end
         else
-            printToColor('That dial was not saved.', object.held_by_color, {0.2, 0.2, 0.8})
+            printToColor('That dial was not saved.', object.held_by_color, {0.2,0.2,0.8})
         end
     end
+end
+
+function PlayerCheck(Color, GUID)
+    --VALADIAN IGNORE PLAYER CHECK
+    if ignorePlayerCheck then return true end
+    local PC = false
+    if getPlayer(Color) ~= nil then
+        local HandPos = getPlayer(Color).getPointerPosition()
+        local DialPos = getObjectFromGUID(GUID).getPosition()
+        if distance(HandPos['x'],HandPos['z'],DialPos['x'],DialPos['z']) < 2 then
+            PC = true
+        end
+    end
+    return PC
 end
 
 function CardInArray(GUID)
@@ -87,17 +89,15 @@ end
 function CardFlipButton(object)
     local CardData = dialpositions[CardInArray(object.GetGUID())]
     if PlayerCheck(CardData["Color"],CardData["GUID"]) == true then
-        -- local rot = getObjectFromGUID(CardData["ShipGUID"]).getRotation()
-        -- object.setRotation({0,rot[2],0})
         object.setRotation({0,CardData["Rotation"][2],0})
         object.clearButtons()
         local movebutton = {['click_function'] = 'CardMoveButton', ['label'] = 'Move', ['position'] = {-0.32, 1, 1}, ['rotation'] =  {0, 0, 0}, ['width'] = 750, ['height'] = 530, ['font_size'] = 250}
         object.createButton(movebutton)
-        local actionbuttonbefore = {['click_function'] = 'CardActionButtonBefore', ['label'] = 'A', ['position'] = {'-.9', 1, 0}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 250}
+        local actionbuttonbefore = {['click_function'] = 'CardActionButtonBefore', ['label'] = 'A', ['position'] = {-0.9, 1, 0}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 250}
         object.createButton(actionbuttonbefore)
+
     end
 end
-
 
 function CardMoveButton(object)
     local CardData = dialpositions[CardInArray(object.GetGUID())]
@@ -109,25 +109,21 @@ function CardMoveButton(object)
         CardData["BarrelRollDisplayed"] = false
         local deletebutton = {['click_function'] = 'CardDeleteButton', ['label'] = 'Delete', ['position'] = {-0.32, 1, 1}, ['rotation'] =  {0, 0, 0}, ['width'] = 750, ['height'] = 530, ['font_size'] = 250}
         object.createButton(deletebutton)
-
         local undobutton = {['click_function'] = 'CardUndoButton', ['label'] = 'Q', ['position'] = {-0.9, 1, -1}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 250}
         object.createButton(undobutton)
-
         local actionbuttonafter = {['click_function'] = 'CardActionButtonAfter', ['label'] = 'A', ['position'] = {-0.9, 1, 0}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 250}
         object.createButton(actionbuttonafter)
-
         local focusbutton = {['click_function'] = 'CardFocusButton', ['label'] = 'F', ['position'] = {0.9, 1, -1}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 250}
         object.createButton(focusbutton)
-
         local stressbutton = {['click_function'] = 'CardStressButton', ['label'] = 'S', ['position'] = {0.9, 1, 0}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 250}
         object.createButton(stressbutton)
-
-        local evadebutton = {['click_function'] = 'CardEvadeButton', ['label'] = 'E', ['position'] = {0.9, 1, 1}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 250}
-        object.createButton(evadebutton)
+        local Evadebutton = {['click_function'] = 'CardEvadeButton', ['label'] = 'E', ['position'] = {0.9, 1, 1}, ['rotation'] =  {0, 0, 0}, ['width'] = 200, ['height'] = 530, ['font_size'] = 250}
+        object.createButton(Evadebutton)
     end
 end
 
 function CallActionButton(object, beforeORafter)
+    local CardData = dialpositions[CardInArray(object.GetGUID())]
     --1 before 2 after
     if CardData["ActionDisplayed"] == false then
         CardData["ActionDisplayed"] = true
@@ -184,20 +180,19 @@ function CallActionButton(object, beforeORafter)
         object.removeButton(14)
         object.removeButton(15)
         object.removeButton(16)
-
     end
 end
 
 
 function CardActionButtonBefore(object)
-    CardData = dialpositions[CardInArray(object.GetGUID())]
+    local CardData = dialpositions[CardInArray(object.GetGUID())]
     if PlayerCheck(CardData["Color"],CardData["GUID"]) == true then
         CallActionButton(object,1)
     end
 end
 
 function CardActionButtonAfter(object)
-    CardData = dialpositions[CardInArray(object.GetGUID())]
+    local CardData = dialpositions[CardInArray(object.GetGUID())]
     if PlayerCheck(CardData["Color"],CardData["GUID"]) == true then
         CallActionButton(object,2)
     end
@@ -206,7 +201,7 @@ end
 
 
 function CardRangeButton(object)
-    CardData = dialpositions[CardInArray(object.GetGUID())]
+    local CardData = dialpositions[CardInArray(object.GetGUID())]
     if PlayerCheck(CardData["Color"],CardData["GUID"]) == true then
         if CardData["RangeDisplayed"] == false then
             CardData["RangeDisplayed"] = true
@@ -219,7 +214,7 @@ function CardRangeButton(object)
 end
 
 function CardBoostLeft(object)
-    CardData = dialpositions[CardInArray(object.GetGUID())]
+    local CardData = dialpositions[CardInArray(object.GetGUID())]
     if PlayerCheck(CardData["Color"],CardData["GUID"]) == true then
         if CardData["BoostDisplayed"] == false then
             CardData["BoostDisplayed"] = true
@@ -228,7 +223,7 @@ function CardBoostLeft(object)
     end
 end
 function CardBoostCenter(object)
-    CardData = dialpositions[CardInArray(object.GetGUID())]
+    local CardData = dialpositions[CardInArray(object.GetGUID())]
     if PlayerCheck(CardData["Color"],CardData["GUID"]) == true then
         if CardData["BoostDisplayed"] == false then
             CardData["BoostDisplayed"] = true
@@ -237,7 +232,7 @@ function CardBoostCenter(object)
     end
 end
 function CardBoostRight(object)
-    CardData = dialpositions[CardInArray(object.GetGUID())]
+    local CardData = dialpositions[CardInArray(object.GetGUID())]
     if PlayerCheck(CardData["Color"],CardData["GUID"]) == true then
         if CardData["BoostDisplayed"] == false then
             CardData["BoostDisplayed"] = true
@@ -246,7 +241,7 @@ function CardBoostRight(object)
     end
 end
 function CardBRLeftTop(object)
-    CardData = dialpositions[CardInArray(object.GetGUID())]
+    local CardData = dialpositions[CardInArray(object.GetGUID())]
     if PlayerCheck(CardData["Color"],CardData["GUID"]) == true then
         if CardData["BarrelRollDisplayed"] == false then
             CardData["BarrelRollDisplayed"] = true
@@ -255,7 +250,7 @@ function CardBRLeftTop(object)
     end
 end
 function CardBRLeftCenter(object)
-    CardData = dialpositions[CardInArray(object.GetGUID())]
+    local CardData = dialpositions[CardInArray(object.GetGUID())]
     if PlayerCheck(CardData["Color"],CardData["GUID"]) == true then
         if CardData["BarrelRollDisplayed"] == false then
             CardData["BarrelRollDisplayed"] = true
@@ -264,7 +259,7 @@ function CardBRLeftCenter(object)
     end
 end
 function CardBRLeftBack(object)
-    CardData = dialpositions[CardInArray(object.GetGUID())]
+    local CardData = dialpositions[CardInArray(object.GetGUID())]
     if PlayerCheck(CardData["Color"],CardData["GUID"]) == true then
         if CardData["BarrelRollDisplayed"] == false then
             CardData["BarrelRollDisplayed"] = true
@@ -273,7 +268,7 @@ function CardBRLeftBack(object)
     end
 end
 function CardBRRightTop(object)
-    CardData = dialpositions[CardInArray(object.GetGUID())]
+    local CardData = dialpositions[CardInArray(object.GetGUID())]
     if PlayerCheck(CardData["Color"],CardData["GUID"]) == true then
         if CardData["BarrelRollDisplayed"] == false then
             CardData["BarrelRollDisplayed"] = true
@@ -282,7 +277,7 @@ function CardBRRightTop(object)
     end
 end
 function CardRightCenter(object)
-    CardData = dialpositions[CardInArray(object.GetGUID())]
+    local CardData = dialpositions[CardInArray(object.GetGUID())]
     if PlayerCheck(CardData["Color"],CardData["GUID"]) == true then
         if CardData["BarrelRollDisplayed"] == false then
             CardData["BarrelRollDisplayed"] = true
@@ -291,7 +286,7 @@ function CardRightCenter(object)
     end
 end
 function CardRightBack(object)
-    CardData = dialpositions[CardInArray(object.GetGUID())]
+    local CardData = dialpositions[CardInArray(object.GetGUID())]
     if PlayerCheck(CardData["Color"],CardData["GUID"]) == true then
         if CardData["BarrelRollDisplayed"] == false then
             CardData["BarrelRollDisplayed"] = true
@@ -301,9 +296,9 @@ function CardRightBack(object)
 end
 
 function CardTargetLock(object)
-    CardData = dialpositions[CardInArray(object.GetGUID())]
+    local CardData = dialpositions[CardInArray(object.GetGUID())]
     if PlayerCheck(CardData["Color"],CardData["GUID"]) == true then
-        take(target.getGUID(), CardData["ShipGUID"],0.37,1,-0.37,true,CardData["Color"],CardData["ShipName"])
+        take(target, CardData["ShipGUID"],0.5,1,-0.5,true,CardData["Color"],CardData["ShipName"])
         notify(CardData["ShipGUID"],'action','acquires a target lock')
     end
 end
@@ -311,7 +306,7 @@ end
 function CardFocusButton(object)
     local CardData = dialpositions[CardInArray(object.GetGUID())]
     if PlayerCheck(CardData["Color"],CardData["GUID"]) == true then
-        take(focus.getGUID(), CardData["ShipGUID"],-0.37,1,-0.37,false,0,0)
+        take(focus, CardData["ShipGUID"],-0.5,1,-0.5,false,0,0)
         notify(CardData["ShipGUID"],'action','takes a focus token')
     end
 end
@@ -319,7 +314,7 @@ end
 function CardStressButton(object)
     local CardData = dialpositions[CardInArray(object.GetGUID())]
     if PlayerCheck(CardData["Color"],CardData["GUID"]) == true then
-        take(stress.getGUID(), CardData["ShipGUID"],0.37,1,0.37,false,0,0)
+        take(stress, CardData["ShipGUID"],0.5,1,0.5,false,0,0)
         notify(CardData["ShipGUID"],'action','takes stress')
     end
 end
@@ -327,7 +322,7 @@ end
 function CardEvadeButton(object)
     local CardData = dialpositions[CardInArray(object.GetGUID())]
     if PlayerCheck(CardData["Color"],CardData["GUID"]) == true then
-        take(evade.getGUID(), CardData["ShipGUID"],-0.37,1,0.37,false,0,0)
+        take(evade, CardData["ShipGUID"],-0.5,1,0.5,false,0,0)
         notify(CardData["ShipGUID"],'action','takes an evade token')
     end
 end
@@ -350,9 +345,6 @@ function CardDeleteButton(object)
         object.setPosition (CardData["Position"])
         object.setRotation (CardData["Rotation"])
         CardData["Color"] = nil
-        if currentphase == MoveSort then
-            Action_AiMove(getObjectFromGUID(CardData["ShipGUID"]))
-        end
     end
 end
 
@@ -366,7 +358,7 @@ function resetdials(guid,notice)
     end
     obj.setVar('HasDial',false)
     if notice == 1 then
-        printToAll(#index .. ' dials removed for ' .. obj.getName() .. '.', {0.2, 0.2, 0.8})
+        printToAll(#index .. ' dials removed for ' .. obj.getName() .. '.', {0.2,0.2,0.8})
     end
     for i=#index,1,-1 do
         table.remove(dialpositions, index[i])
@@ -418,27 +410,21 @@ function checkdials(guid)
         end
     end
     if display == true then
-        printToAll('Error: ' .. obj.getName() .. ' attempted to save dials already saved to another ship. Use rd on old ship first.',{0.2, 0.2, 0.8})
+        printToAll('Error: ' .. obj.getName() .. ' attempted to save dials already saved to another ship. Use rd on old ship first.',{0.2,0.2,0.8})
     end
     if deckerror == true then
-        printToAll('Error: Cannot save dials in deck format.',{0.2, 0.2, 0.8})
+        printToAll('Error: Cannot save dials in deck format.',{0.2,0.2,0.8})
     end
     if error == true then
-        printToAll('Caution: Cannot save dials in main play area.',{0.2, 0.2, 0.8})
+        printToAll('Caution: Cannot save dials in main play area.',{0.2,0.2,0.8})
     end
     if count <= 17 then
-        printToAll(count .. ' dials saved for ' .. obj.getName() .. '.', {0.2, 0.2, 0.8})
+        printToAll(count .. ' dials saved for ' .. obj.getName() .. '.', {0.2,0.2,0.8})
     else
         resetdials(guid,0)
-        printToAll('Error: Tried to save to many dials for ' .. obj.getName() .. '.', {0.2, 0.2, 0.8})
+        printToAll('Error: Tried to save to many dials for ' .. obj.getName() .. '.', {0.2,0.2,0.8})
     end
     setpending(guid)
-end
-
-function distance(x,y,a,b)
-    x = (x-a)*(x-a)
-    y = (y-b)*(y-b)
-    return math.sqrt(math.abs((x+y)))
 end
 
 function SpawnDialGuide(guid)
@@ -458,7 +444,7 @@ function SpawnDialGuide(guid)
     DialGuide.lock()
     DialGuide.scale({'.4','.4','.4'})
 
-    local button = {['click_function'] = 'GuideButton', ['label'] = 'Remove', ['position'] = {0, 0.5, 0}, ['rotation'] =  {0, 270, 0}, ['width'] = 1500, ['height'] = 1500, ['font_size'] = 500}
+    local button = {['click_function'] = 'GuideButton', ['label'] = 'Remove', ['position'] = {0, 0.5, 0}, ['rotation'] =  {0, 270, 0}, ['width'] = 1500, ['height'] = 1500, ['font_size'] = 250}
     DialGuide.createButton(button)
     shipobject.setDescription('Pending')
     checkdials(guid)
@@ -472,8 +458,8 @@ function update ()
     for i,ship in ipairs(getAllObjects()) do
         if ship.tag == 'Figurine' and ship.name ~= '' then
             local shipguid = ship.getGUID()
-            local shipdesc = ship.getDescription()
             local shipname = ship.getName()
+            local shipdesc = ship.getDescription()
             checkname(shipguid,shipdesc,shipname)
             check(shipguid,shipdesc)
         end
@@ -486,12 +472,19 @@ function update ()
     update_ai()
 end
 
+function round(x)
+    --Can you be Deleted?
+    return x>=0 and math.floor(x+0.5) or math.ceil(x-0.5)
+end
+local freshLock
 function take(parent, guid, xoff, yoff, zoff, TL, color, name)
     local obj = getObjectFromGUID(guid)
     local objp = getObjectFromGUID(parent)
     local world = obj.getPosition()
+
     --VALADIAN Rotate Take to be relative position
     local offset = RotateVector({xoff, yoff, zoff}, obj.getRotation()[2])
+
     local params = {}
     params.position = {world[1]+offset[1], world[2]+offset[2], world[3]+offset[3]}
     if TL == true then
@@ -510,17 +503,22 @@ function setNewLock(object, params)
 end
 
 function undo(guid)
-    local obj
     if undolist[guid] ~= nil then
-        obj = getObjectFromGUID(guid)
+        local obj = getObjectFromGUID(guid)
         obj.setPosition(undopos[guid])
         obj.setRotation(undorot[guid])
         setpending(guid)
     else
-        obj = getObjectFromGUID(guid)
+        local obj = getObjectFromGUID(guid)
         setpending(guid)
     end
     obj.Unlock()
+end
+
+function distance(x,y,a,b)
+    x = (x-a)*(x-a)
+    y = (y-b)*(y-b)
+    return math.sqrt(math.abs((x+y)))
 end
 
 function storeundo(guid)
@@ -563,290 +561,8 @@ end
 function setlock(guid)
     fixname(guid)
     local obj = getObjectFromGUID(guid)
-    obj.setDescription('Locking')
-end
-
-
-function notify(guid,move,text)
-    if text == nil then
-        text = ''
-    end
-
-    local obj = getObjectFromGUID(guid)
-    local name = obj.getName()
-    local name = string.gsub(name,":","|")
-    if move == 'q' then
-        printToAll(name .. ' executed undo.', {0, 1, 0})
-    elseif move == 'set' then
-        printToAll(name .. ' set name.', {0, 1, 1})
-    elseif move == 'r' then
-        printToAll(name .. ' spawned a ruler.', {0.2, 0.2, 0.8})
-    elseif move == 'action' then
-        printToAll(name .. ' ' .. text .. '.', {0.959999978542328 , 0.439000010490417 , 0.806999981403351})
-    elseif move == 'keep' then
-        printToAll(name .. ' saved location.', {0, 1, 1})
-    else
-        local color = {1,1,1}
-        if aistressed[guid] then
-            color = {1, 0, 0}
-        end
-        printToAll(name .. ' ' .. text ..' (' .. move .. ').', color)
-    end
-end
-
-
-function check(guid,move)
-    local ship = getObjectFromGUID(guid)
-    local shipname = ship.getName()
-    -- Checking for Lock
-    if move == 'Locking' then
-        if locktimer[guid] ~= nil or locktimer[guid] == 0 then
-            if locktimer[guid] > 1 then
-                locktimer[guid] = locktimer[guid] - 1
-            elseif locktimer[guid] == 0 then
-                locktimer[guid] = 100
-            else
-                locktimer[guid] = 0
-                local obj = getObjectFromGUID(guid)
-                obj.lock()
-                setpending(guid)
-            end
-        else
-            locktimer[guid] = 100
-        end
-    end
-
-    --Ruler
-    if move == 'r' or move == 'ruler' then
-        ruler(guid,1)
-    end
-
-    --DialCheck
-    if move == 'sd' or move == 'storedial' or move == 'storedials' then
-        if move == 'sd' then
-            checkdials(guid)
-        else
-            SpawnDialGuide(guid)
-        end
-    end
-    if move == 'rd' or move == 'removedial' or move == 'removedials' then
-        resetdials(guid, 1)
-    end
-
-    -- Straight Commands
-    if move == 's0' then
-        notify(guid,move,'is stationary')
-        setpending(guid)
-    end
-    if move == 's1' then
-        straight(guid,2.9,1.45)
-        notify(guid,move,'flew straight 1')
-    elseif move == 's2' or move == 'cs' then
-        if move == 's2' then
-            straight(guid,4.35,1.45)
-            notify(guid,move,'flew straight 2')
-        else
-            if shipname:match '%LGS$' then
-            else
-                straight(guid,4.35,1.45)
-                notify(guid,move,'decloaked straight 2')
-            end
-        end
-    elseif move == 's3' then
-        straight(guid,5.79,1.45)
-        notify(guid,move,'flew straight 3')
-    elseif move == 's4' then
-        straight(guid,7.25,1.5)
-        notify(guid,move,'flew straight 4')
-    elseif move == 's5' then
-        straight(guid,8.68,1.45)
-        notify(guid,move,'flew straight 5')
-        -- Bank Commands
-    elseif move == 'br1' then
-        right(guid,3.33,1.36,45,1.26,0.5)
-        notify(guid,move,'banked right 1')
-    elseif move == 'br2' then
-        right(guid,4.59,1.89,45,1.26,0.5)
-        notify(guid,move,'banked right 2')
-    elseif move == 'br3' then
-        right(guid,5.91032266616821,2.5119037628174,45,1.26,0.5)
-        notify(guid,move,'banked right 3')
-    elseif move == 'bl1' or move == 'be1' then
-        left(guid,3.33,1.36,-45,1.26,0.5)
-        notify(guid,move,'banked left 1')
-    elseif move == 'bl2' or move == 'be2' then
-        left(guid,4.59,1.89,-45,1.26,0.5)
-        notify(guid,move,'banked left 2')
-    elseif move == 'bl3' or move == 'be3' then
-        left(guid,5.91032266616821,2.5119037628174,-45,1.26,0.5)
-        notify(guid,move,'banked left 3')
-        -- Turn Commands
-    elseif move == 'tr1' then
-        right(guid,1.9999457550049,2.00932357788086,90,0.7,0.75)
-        notify(guid,move,'turned right 1')
-    elseif move == 'tr2' then
-        right(guid,2.9963474273682,2.97769641876221,90,0.7,0.75)
-        notify(guid,move,'turned right 2')
-    elseif move == 'tr3' then
-        right(guid,3.9047927856445,4.052940441535946,90,0.7,0.75)
-        notify(guid,move,'turned right 3')
-    elseif move == 'tl1' or move == 'te1' then
-        left(guid,2.0049457550049,2.02932357788086,270,0.7,0.75)
-        notify(guid,move,'turned left 1')
-    elseif move == 'tl2' or move == 'te2' then
-        left(guid,2.9963474273682,2.97769641876221,270,0.7,0.75)
-        notify(guid,move,'turned left 2')
-    elseif move == 'tl3' or move == 'te3' then
-        left(guid,3.9047927856445,4.052940441535946,270,0.7,0.75)
-        notify(guid,move,'turned left 3')
-        -- Koiogran Turn Commands
-    elseif move == 'k2' then
-        straightk(guid,4.35,1.45)
-        notify(guid,move,'koiogran turned 2')
-    elseif move == 'k3' then
-        straightk(guid,5.79,1.45)
-        notify(guid,move,'koiogran turned 3')
-    elseif move == 'k4' then
-        straightk(guid,7.25,1.45)
-        notify(guid,move,'koiogran turned 4')
-    elseif move == 'k5' then
-        straightk(guid,8.68,1.45)
-        notify(guid,move,'koiogran turned 5')
-        -- Segnor's Loop Commands
-    elseif move == 'bl2s' or move == 'be2s' then
-        left(guid,4.59,1.89,135,1.26,0.5)
-        notify(guid,move,'segnors looped left 2')
-    elseif move == 'bl3s' or move == 'be3s' then
-        left(guid,5.91032266616821,2.5119037628174,135,1.26,0.5)
-        notify(guid,move,'segnors looped left 3')
-    elseif move == 'br2s' then
-        right(guid,4.59,1.89,225,1.26,0.5)
-        notify(guid,move,'segnors looped right 2')
-    elseif move == 'br3s' then
-        right(guid,5.91032266616821,2.5119037628174,225,1.26,0.5)
-        notify(guid,move,'segnors looped right 3')
-        -- Barrel Roll Commands
-    elseif move == 'xl' or move == 'xe' then
-        if shipname:match '%LGS$' then
-            left(guid,0,0.73999404907227,0,0,2.87479209899903)
-        else
-            left(guid,0,2.8863945007324,0,0,0)
-        end
-        notify(guid,move,'barrel rolled left')
-    elseif move == 'xlf' or move == 'xef' or move == 'rolllf' or move == 'rollet' then
-        if shipname:match '%LGS$' then
-            left(guid,2.936365485191352/2,0.73999404907227,0,0,2.87479209899903)
-        else
-            left(guid,0.73999404907227,2.8863945007324,0,0,0)
-        end
-        notify(guid,move,'barrel rolled forward left')
-    elseif move == 'xlb' or move == 'xeb' or move == 'rolllb'  or move == 'rolleb' then
-        if shipname:match '%LGS$' then
-            left(guid,-2.936365485191352/2,0.73999404907227,0,0,2.87479209899903)
-        else
-            left(guid,-0.73999404907227,2.8863945007324,0,0,0)
-        end
-        notify(guid,move,'barrel rolled backwards left')
-    elseif move == 'xr' or move == 'rollr'then
-        if shipname:match '%LGS$' then
-            right(guid,0,0.73999404907227,0,0,2.87479209899903)
-        else
-            right(guid,0,2.8863945007324,0,0,0)
-        end
-        notify(guid,move,'barrel rolled right')
-    elseif move == 'xrf' or move == 'rollrf' then
-        if shipname:match '%LGS$' then
-            right(guid,2.936365485191352/2,0.73999404907227,0,0,2.87479209899903)
-        else
-            right(guid,0.73999404907227,2.8863945007324,0,0,0)
-        end
-        notify(guid,move,'barrel rolled forward right')
-    elseif move == 'xrb' or move == 'rollrb' then
-        if shipname:match '%LGS$' then
-            right(guid,-2.936365485191352/2,0.73999404907227,0,0,2.87479209899903)
-        else
-            right(guid,-0.73999404907227,2.8863945007324,0,0,0)
-        end
-        notify(guid,move,'barrel rolled backwards right')
-        -- Decloak Commands
-    elseif move == 'cl' or move == 'ce' then
-        if shipname:match '%LGS$' then
-        else
-            left(guid,0,4.3295917510986,0,0,0)
-            notify(guid,move,'decloaked left')
-        end
-    elseif move == 'clf' or move == 'cef' then
-        if shipname:match '%LGS$' then
-        else
-            left(guid,0.73999404907227,4.3295917510986,0,0,0)
-            notify(guid,move,'decloaked forward left')
-        end
-    elseif move == 'clb' or move == 'ceb' then
-        if shipname:match '%LGS$' then
-        else
-            left(guid,-0.73999404907227,4.3295917510986,0,0,0)
-            notify(guid,move,'decloaked backwards left')
-        end
-    elseif move == 'cr' or move == 'ce' then
-        if shipname:match '%LGS$' then
-        else
-            right(guid,0,4.3295917510986,0,0,0)
-            notify(guid,move,'decloaked right')
-        end
-    elseif move == 'crf' then
-        if shipname:match '%LGS$' then
-        else
-            right(guid,0.73999404907227,4.3295917510986,0,0,0)
-            notify(guid,move,'decloaked forward right')
-        end
-    elseif move == 'crb' then
-        if shipname:match '%LGS$' then
-        else
-            right(guid,-0.73999404907227,4.3295917510986,0,0,0)
-            notify(guid,move,'decloak backwards right')
-        end
-
-        -- MISC Commands
-    elseif move == 'checkpos' then
-        checkpos(guid)
-    elseif move == 'checkrot' then
-        checkrot(guid)
-    elseif move == 'keep' then
-        storeundo(guid)
-        notify(guid,'keep')
-        setpending(guid)
-    elseif move == 'set' then
-        registername(guid)
-        notify(guid,move)
-    elseif move == 'undo' or move == 'q' then
-        undo(guid)
-        notify(guid,'q')
-    end
-    --VALADIAN AI COMMANDS
-    check_ai(guid, move)
---    if not empty(players_up_next) then
---        if players_up_next_delay>100 then
---            for i,ship in ipairs(players_up_next) do
---                printToAll("PlayersTurn: ",{0,1,1})
---                prettyPrint(ship)
---            end
---            players_up_next = {}
---            players_up_next_delay = 0
---        else
---            players_up_next_delay = players_up_next_delay + 1
---        end
---    end
---    if ai_stress then
---
---        if ai_stress_delay>100 then
---
---            printToAll('[STRESS - No Action]',{1, 0, 0})
---            ai_stress = false
---            ai_stress_delay = 0
---        else
---            ai_stress_delay = ai_stress_delay + 1
---        end
---    end
+    obj.setVar('Lock',true)
+    setpending(guid)
 end
 
 function checkpos(guid)
@@ -868,9 +584,8 @@ function checkrot(guid)
 end
 
 function ruler(guid,action)
-
+    -- action for 1 for display button 2 for not
     local shipobject = getObjectFromGUID(guid)
-    shipobject.clearButtons()
     local shipname = shipobject.getName()
     local direction = shipobject.getRotation()
     local world = shipobject.getPosition()
@@ -889,7 +604,7 @@ function ruler(guid,action)
     obj_parameters.rotation = { 0, direction[2] +180, 0 }
     local newruler = spawnObject(obj_parameters)
     local custom = {}
-    if shipname:match '%LGS$' then
+    if isBigShip(guid) == true then
         custom.mesh = 'http://pastebin.com/raw/3AU6BBjZ'
         custom.collider = 'https://paste.ee/r/JavTd'
     else
@@ -903,7 +618,7 @@ function ruler(guid,action)
     if action == 2 then
         return newruler
     else
-        local button = {['click_function'] = 'actionButton', ['label'] = 'Remove', ['position'] = {0, 0.5, 0}, ['rotation'] =  {0, 0, 0}, ['width'] = 1500, ['height'] = 1500, ['font_size'] = 500}
+        local button = {['click_function'] = 'actionButton', ['label'] = 'Remove', ['position'] = {0, 0.5, 0}, ['rotation'] =  {0, 0, 0}, ['width'] = 1300, ['height'] = 1300, ['font_size'] = 250}
         newruler.createButton(button)
     end
     notify(guid,'r')
@@ -916,88 +631,524 @@ function actionButton(object)
     Render_ButtonState(ship)
 end
 
-function straight(guid,forwardDistance,bsfd)
-    storeundo(guid)
+function isBigShip(guid)
     local obj = getObjectFromGUID(guid)
-    local shipname = obj.getName()
-    if shipname:match '%LGS$' then
-        forwardDistance = forwardDistance + bsfd
+    local Properties = obj.getCustomObject()
+    for i,ship in pairs(BigShipList) do
+        if Properties.collider == ship then
+            return true
+        end
     end
-    local direction = obj.getRotation()
-    local world = obj.getPosition()
-    local rotval = round(direction[2])
-    local radrotval = math.rad(rotval)
-    local xDistance = math.sin(radrotval) * forwardDistance * -1
-    local zDistance = math.cos(radrotval) * forwardDistance * -1
-    setlock(guid)
-    obj.setPosition( {world[1]+xDistance, world[2]+2, world[3]+zDistance} )
-    obj.Rotate({0, 0, 0})
-
-
+    return false
 end
 
-function straightk(guid,forwardDistance,bsfd)
-    storeundo(guid)
-    local obj = getObjectFromGUID(guid)
-    local shipname = obj.getName()
-    if shipname:match '%LGS$' then
-        forwardDistance = forwardDistance + bsfd
+
+function notify(guid,move,text,ship)
+    if text == nil then
+        text = ''
     end
-    local direction = obj.getRotation()
-    local world = obj.getPosition()
-    local rotval = round(direction[2])
-    local radrotval = math.rad(rotval)
-    local xDistance = math.sin(radrotval) * forwardDistance * -1
-    local zDistance = math.cos(radrotval) * forwardDistance * -1
-    setlock(guid)
-    obj.setPosition( {world[1]+xDistance, world[2]+2, world[3]+zDistance} )
-    obj.Rotate({0, 180, 0})
+    local obj = getObjectFromGUID(guid)
+    local name = obj.getName()
+    if move == 'q' then
+        printToAll(name .. ' executed undo.', {0, 1, 0})
+    elseif move == 'set' then
+        printToAll(name .. ' set name.', {0, 1, 1})
+    elseif move == 'r' then
+        printToAll(name .. ' spawned a ruler.', {0.2, 0.2, 0.8})
+    elseif move == 'action' then
+        printToAll(name .. ' ' .. text .. '.', {0.959999978542328 , 0.439000010490417 , 0.806999981403351})
+    elseif move == 'keep' then
+        printToAll(name .. ' stored his position.', {0.5, 0, 1})
+    elseif move == 'decloak' then
+        printToAll(name .. ' cannot decloak.', {0.5, 1, 0.9})
+    else
+        if ship ~= nil then
+            printToAll(name .. ' attemped a (' .. move .. ') but is now touching ' .. ship .. '.', {0.9, 0.5, 0})
+        else
+            printToAll(name .. ' ' .. text ..' (' .. move .. ').', {1, 0, 0})
+        end
+    end
 end
 
-function right(guid,forwardDistance,sidewaysDistance,rotate,bsfd,bssd)
-    storeundo(guid)
-    local obj = getObjectFromGUID(guid)
-    local shipname = obj.getName()
-    if shipname:match '%LGS$' then
-        forwardDistance = forwardDistance + bsfd
-        sidewaysDistance = sidewaysDistance + bssd
+function check(guid,move)
+
+    -- Ruler Commands
+    if move == 'r' or move == 'ruler' then
+        ruler(guid,1)
+
+        -- Auto Dial Commands
+    elseif move == 'sd' or move == 'storedial' or move == 'storedials' then
+        if move == 'sd' then
+            checkdials(guid)
+        else
+            SpawnDialGuide(guid)
+        end
+    elseif move == 'rd' or move == 'removedial' or move == 'removedials' then
+        resetdials(guid, 1)
+
+        -- Straight Commands
+    elseif move == 's0' then
+        notify(guid,move,'is stationary')
+        setpending(guid)
+    elseif move == 's1' then
+        straight(guid,2.9,false,move,'flew straight 1')
+    elseif move == 's2' then
+        straight(guid,4.35,false,move,'flew straight 2')
+    elseif move == 's3' then
+        straight(guid,5.79,false,move,'flew straight 3')
+    elseif move == 's4' then
+        straight(guid,7.25,false,move,'flew straight 4')
+    elseif move == 's5' then
+        straight(guid,8.68,false,move,'flew straight 5')
+
+        -- Bank Commands
+    elseif move == 'br1' then
+        turnShip(guid,3.689526061,1,0,false,move,'banked right 1')
+    elseif move == 'br2' then
+        turnShip(guid,5.490753857,1,0,false,move,'banked right 2')
+    elseif move == 'br3' then
+        turnShip(guid,7.363015996,1,0,false,move,'banked right 3')
+    elseif move == 'bl1' or move == 'be1' then
+        turnShip(guid,3.689526061,0,0,false,move,'banked left 1')
+    elseif move == 'bl2' or move == 'be2' then
+        turnShip(guid,5.490753857,0,0,false,move,'banked left 2')
+    elseif move == 'bl3' or move == 'be3' then
+        turnShip(guid,7.363015996,0,0,false,move,'banked left 3')
+
+        -- Turn Commands
+    elseif move == 'tr1' then
+        turnShip(guid,2,1,1,false,move,'turned right 1')
+    elseif move == 'tr2' then
+        turnShip(guid,3,1,1,false,move,'turned right 2')
+    elseif move == 'tr3' then
+        turnShip(guid,4,1,1,false,move,'turned right 3')
+    elseif move == 'tl1' or move == 'te1' then
+        turnShip(guid,2,0,1,false,move,'turned left 1')
+    elseif move == 'tl2' or move == 'te2' then
+        turnShip(guid,3,0,1,false,move,'turned left 2')
+    elseif move == 'tl3' or move == 'te3' then
+        turnShip(guid,4,0,1,false,move,'turned left 3')
+
+        -- Koiogran Turn Commands
+    elseif move == 'k2' then
+        straight(guid,4.35,true,move,'koiogran turned 2')
+    elseif move == 'k3' then
+        straight(guid,5.79,true,move,'koiogran turned 3')
+    elseif move == 'k4' then
+        straight(guid,7.25,true,move,'koiogran turned 4')
+    elseif move == 'k5' then
+        straight(guid,8.68,true,move,'koiogran turned 5')
+
+        -- Segnor's Loop Commands
+    elseif move == 'bl2s' or move == 'be2s' then
+        turnShip(guid,5.490753857,0,0,true,move,'segnors looped left 2')
+    elseif move == 'bl3s' or move == 'be3s' then
+        turnShip(guid,7.363015996,0,0,true,move,'segnors looped left 3')
+    elseif move == 'br2s' then
+        turnShip(guid,5.490753857,1,0,true,move,'segnors looped right 2')
+    elseif move == 'br3s' then
+        turnShip(guid,7.363015996,0,0,true,move,'segnors looped right 3')
+
+        -- Barrel Roll Commands
+    elseif move == 'xl' or move == 'xe' then
+        MiscMovement(guid,0,1,0,move,'barrel rolled left')
+    elseif move == 'xlf' or move == 'xef' or move == 'rolllf' or move == 'rollet' then
+        MiscMovement(guid,0.73999404907227,1,0,move,'barrel rolled forward left')
+    elseif move == 'xlb' or move == 'xeb' or move == 'rolllb'  or move == 'rolleb' then
+        MiscMovement(guid,-0.73999404907227,1,0,move,'barrel rolled backwards left')
+    elseif move == 'xr' or move == 'rollr'then
+        MiscMovement(guid,0,1,1,move,'barrel rolled right')
+    elseif move == 'xrf' or move == 'rollrf' then
+        MiscMovement(guid,0.73999404907227,1,1,move,'barrel rolled forward right')
+    elseif move == 'xrb' or move == 'rollrb' then
+        MiscMovement(guid,-0.73999404907227,1,1,move,'barrel rolled backwards right')
+
+        -- Decloak Commands
+    elseif move == 'cs' or move == 'cf' then
+        MiscMovement(guid,4.35,2,2,move,'decloaked straight')
+    elseif move == 'cl' or move == 'ce' then
+        MiscMovement(guid,0,2,0,move,'decloaked left')
+    elseif move == 'clf' or move == 'cef' then
+        MiscMovement(guid,0.73999404907227,2,0,move,'decloaked forward left')
+    elseif move == 'clb' or move == 'ceb' then
+        MiscMovement(guid,-0.73999404907227,2,0,move,'decloaked backwards left')
+    elseif move == 'cr' then
+        MiscMovement(guid,0,2,1,move,'decloaked right')
+    elseif move == 'crf' then
+        MiscMovement(guid,0.73999404907227,2,1,move,'decloaked forward right')
+    elseif move == 'crb' then
+        MiscMovement(guid,-0.73999404907227,2,1,move,'decloak backwards right')
+
+        -- MISC Commands
+    elseif move == 'checkpos' then
+        checkpos(guid)
+    elseif move == 'checkrot' then
+        checkrot(guid)
+    elseif move == 'keep' then
+        storeundo(guid)
+        notify(guid,move)
+        setpending(guid)
+    elseif move == 'set' then
+        registername(guid)
+        notify(guid,move)
+    elseif move == 'undo' or move == 'q' then
+        undo(guid)
+        notify(guid,'q')
     end
-    local direction = obj.getRotation()
-    local world = obj.getPosition()
-    local rotval = round(direction[2])
-    local radrotval = math.rad(rotval)
-    local xDistance = math.sin(radrotval) * forwardDistance * -1
-    local zDistance = math.cos(radrotval) * forwardDistance * -1
-    local radrotval = radrotval + math.rad(90)
-    local xDistance = xDistance + (math.sin(radrotval) * sidewaysDistance * -1)
-    local zDistance = zDistance + (math.cos(radrotval) * sidewaysDistance * -1)
-    setlock(guid)
-    obj.setPosition( {world[1]+xDistance, world[2]+2, world[3]+zDistance} )
-    obj.Rotate({0, rotate, 0})
+    --VALADIAN AI COMMANDS
+    check_ai(guid, move)
 end
 
-function left(guid,forwardDistance,sidewaysDistance,rotate,bsfd,bssd)
+
+
+
+function MiscMovement(guid,forwardDistance,type,direction,move,text)
+    --guid = ship moving
+    --type 1 = barrel roll 2 = decloak
+    --direction = 0 left    1 right  2 forward
+    --forwardDistance = distance to be traveled
     storeundo(guid)
     local obj = getObjectFromGUID(guid)
     local shipname = obj.getName()
-    if shipname:match '%LGS$' then
-        forwardDistance = forwardDistance + bsfd
-        sidewaysDistance = sidewaysDistance + bssd
+    local sidewaysDistance
+    if type == 1 then
+        --barrel roll
+        sidewaysDistance = 2.8863945007324
+    elseif type == 2 then
+        --decloak
+        if direction == 2 then
+            sidewaysDistance = 0
+        else
+            sidewaysDistance = 4.3295917510986
+        end
     end
-    local direction = obj.getRotation()
+    if isBigShip(guid) == true then
+        --barrelroll
+        if type == 1 then
+            --barrel roll
+            sidewaysDistance = 3.6147861480713
+            forwardDistance = forwardDistance*2
+        elseif type == 2 then
+            --nocloak big ships
+            move = 'decloak'
+            forwardDistance = 0
+            sidewaysDistance = 0
+        end
+    end
+    local rot = obj.getRotation()
     local world = obj.getPosition()
-    local rotval = round(direction[2])
-    local radrotval = math.rad(rotval)
+    local radrotval = math.rad(rot[2])
     local xDistance = math.sin(radrotval) * forwardDistance * -1
     local zDistance = math.cos(radrotval) * forwardDistance * -1
-    radrotval = radrotval - math.rad(90)
+    --left is - and + is right
+    if direction == 0 then
+        radrotval = radrotval - math.rad(90)
+    elseif direction == 1 then
+        radrotval = radrotval + math.rad(90)
+    end
     xDistance = xDistance + (math.sin(radrotval) * sidewaysDistance * -1)
     zDistance = zDistance + (math.cos(radrotval) * sidewaysDistance * -1)
-    setlock(guid)
     obj.setPosition( {world[1]+xDistance, world[2]+2, world[3]+zDistance} )
-    obj.Rotate({0, rotate, 0})
+    obj.Rotate({0, 0, 0})
+    setlock(guid)
+    notify(guid,move,text)
 end
 
+
+
+function turnShip(guid,radius,direction,type,kturn,move,text)
+    --radius = turn radius
+    --direction = 0  - left  1 - right
+    --type = 0 - 45 deg   1 - 90 deg
+    --kturn = true false
+    --guid = ship moving
+    -- move and text for notify
+    storeundo(guid)
+    local obj = getObjectFromGUID(guid)
+    local rot = obj.getRotation()
+    local pos = obj.getPosition()
+    local degree = {}
+    if type == 0 then
+        degree = 45
+    elseif type == 1 then
+        degree = 90
+    end
+    local BumpingObjects = posbumps(guid, direction)
+    local Bumped = {false, nil}
+    local coords,theta = turncoords(guid,radius,direction,degree,type)
+    if BumpingObjects ~= nil then
+        for k=#BumpingObjects ,1,-1 do
+            local doescollide = collide(pos[1]+coords[1],pos[3]+coords[2],theta,guid,BumpingObjects[k]["Position"][1],BumpingObjects[k]["Position"][3],BumpingObjects[k]["Rotation"][2],BumpingObjects[k]["ShipGUID"])
+            if doescollide == true then
+                for e2=degree, 1, -1 do
+                    local checkdegree = e2
+                    coords,theta = turncoords(guid,radius,direction,checkdegree,type)
+                    local doescollide2 = collide(pos[1]+coords[1],pos[3]+coords[2],theta,guid,BumpingObjects[k]["Position"][1],BumpingObjects[k]["Position"][3],BumpingObjects[k]["Rotation"][2],BumpingObjects[k]["ShipGUID"])
+                    if doescollide2 == false then
+                        degree = checkdegree
+                        Bumped = {true, k}
+                        break
+                    end
+                end
+            end
+        end
+    end
+    obj.setPosition({pos[1] + coords[1], 2, pos[3] + coords[2]})
+    if kturn == true and Bumped[1] == false then
+        theta = theta - 180
+    end
+    obj.Rotate({0, theta, 0})
+    if Bumped[1] == true then
+        notify(guid,move,text,BumpingObjects[Bumped[2]]["ShipName"])
+    else
+        notify(guid,move,text)
+    end
+    setlock(guid)
+end
+
+
+
+function straight(guid,forwardDistance,kturn,move,text)
+    -- guid = ship moving
+    -- forwardDistance = amount to move forwardDistance
+    -- kturn true or false
+    -- move and text for notify
+    storeundo(guid)
+    local obj = getObjectFromGUID(guid)
+    local pos = obj.getPosition()
+    local rot = obj.getRotation()
+    if isBigShip(guid) == true then
+        forwardDistance = 1.468 + forwardDistance
+    end
+    local Bumped = {false , nil}
+    local BumpingObjects = posbumps(guid, 2)
+    local xDistance = math.sin(math.rad(rot[2])) * forwardDistance * -1
+    local zDistance = math.cos(math.rad(rot[2])) * forwardDistance * -1
+    if BumpingObjects ~= nil then
+        for k=#BumpingObjects ,1,-1 do
+            local doescollide = collide(pos[1]+xDistance,pos[3]+zDistance,rot[2],guid,BumpingObjects[k]["Position"][1],BumpingObjects[k]["Position"][3],BumpingObjects[k]["Rotation"][2],BumpingObjects[k]["ShipGUID"])
+            if doescollide == true then
+                for e2=100, 1, -1 do
+                    local checkdistance = forwardDistance*(e2/100)
+                    xDistance = math.sin(math.rad(rot[2])) * checkdistance * -1
+                    zDistance = math.cos(math.rad(rot[2])) * checkdistance * -1
+                    local doescollide2 = collide(pos[1]+xDistance,pos[3]+zDistance,rot[2],guid,BumpingObjects[k]["Position"][1],BumpingObjects[k]["Position"][3],BumpingObjects[k]["Rotation"][2],BumpingObjects[k]["ShipGUID"])
+                    if doescollide2 == false then
+                        forwardDistance = checkdistance
+                        Bumped = {true, k}
+                        break
+                    end
+                end
+            end
+        end
+    end
+    obj.setPosition({pos[1]+xDistance, pos[2]+2, pos[3]+zDistance})
+    if kturn == true and Bumped[1] == false then
+        obj.Rotate({0, 180, 0})
+    else
+        obj.Rotate({0, 0, 0})
+    end
+    if Bumped[1] == true then
+        notify(guid,move,text,BumpingObjects[Bumped[2]]["ShipName"])
+    else
+        notify(guid,move,text)
+    end
+    setlock(guid)
+end
+
+function turncoords(guid,radius,direction,theta,type)
+    -- DO NOT CALL THIS USE TURN
+    -- guid = ship moving
+    -- radius of turn
+    -- direction 0 left    1 right
+    -- theta = 0 to 90
+    -- type = 0 for 45 or 1 for 90
+    -- This can be condensed alot by another function
+    -- to lazy atm
+    local scale = 0.734
+    radius = (math.sqrt((radius - scale) * (radius - scale) * 2))/2
+
+    if isBigShip(guid) == true then
+        scale = scale * 2
+    end
+
+    local obj = getObjectFromGUID(guid)
+    local rot = obj.getRotation()
+    local pos = obj.getPosition()
+    local xLeftDistance = pos[1] + radius * math.sin(math.rad(rot[2] + 135 - theta)) - radius * math.cos(math.rad(rot[2] + 135 - theta))
+    local yLeftDistance = pos[3] + radius * math.cos(math.rad(rot[2] + 135 - theta)) + radius * math.sin(math.rad(rot[2] + 135 - theta))
+    local xRightDistance = pos[1] + radius * math.sin(math.rad(rot[2] - 45 + theta)) - radius * math.cos(math.rad(rot[2] - 45 + theta))
+    local yRightDistance = pos[3] + radius * math.cos(math.rad(rot[2] - 45 + theta)) + radius * math.sin(math.rad(rot[2] - 45 + theta))
+
+    local rvector = {pos[1] + radius * math.sin(math.rad(rot[2]-45)) - radius * math.cos(math.rad(rot[2]-45)), pos[3] + radius * math.cos(math.rad(rot[2]-45)) + radius * math.sin(math.rad(rot[2]-45))}
+    local rnvector = {math.sin(math.rad(rot[2] +90))* -1, math.cos(math.rad(rot[2]+90))* -1}
+    rnvector = getNormal(rnvector[1],rnvector[2])
+    rnvector = {rnvector[1]*scale,rnvector[2]*scale}
+
+    local lvector = {pos[1] + radius * math.sin(math.rad(rot[2]+135)) - radius * math.cos(math.rad(rot[2]+135)), pos[3] + radius * math.cos(math.rad(rot[2]+135)) + radius * math.sin(math.rad(rot[2]+135))}
+    local lnvector = {math.sin(math.rad(rot[2] -90))* -1,  math.cos(math.rad(rot[2]-90))* -1}
+    lnvector = getNormal(lnvector[1],lnvector[2])
+    lnvector = {lnvector[1]*scale,lnvector[2]*scale}
+
+    local fvector = {pos[1] + radius * math.sin(math.rad(rot[2]-135)) - radius * math.cos(math.rad(rot[2]-135)), pos[3] + radius * math.cos(math.rad(rot[2]-135)) + radius * math.sin(math.rad(rot[2]-135))}
+    local fnvector = {math.sin(math.rad(rot[2])) * -1, math.cos(math.rad(rot[2])) * -1}
+    fnvector = getNormal(fnvector[1],fnvector[2])
+    fnvector = {fnvector[1]*scale,fnvector[2]*scale}
+
+    local fnhalfrvector = {math.sin(math.rad(rot[2]+45)) * -1, math.cos(math.rad(rot[2]+45)) * -1}
+    fnhalfrvector = getNormal(fnhalfrvector[1],fnhalfrvector[2])
+    fnhalfrvector = {fnhalfrvector[1]*scale,fnhalfrvector[2]*scale}
+
+    local fnhalflvector = {math.sin(math.rad(rot[2]-45)) * -1, math.cos(math.rad(rot[2]-45)) * -1}
+    fnhalflvector = getNormal(fnhalflvector[1],fnhalflvector[2])
+    fnhalflvector = {fnhalflvector[1]*scale,fnhalflvector[2]*scale}
+
+    local newleftturnvector = {lvector[1]-xLeftDistance+ fnvector[1],lvector[2]-yLeftDistance+ fnvector[2]}
+    local newrightturnvector = {rvector[1]-xRightDistance+ fnvector[1],rvector[2]-yRightDistance+ fnvector[2]}
+
+    if type == 1 then
+        if theta == 90 then
+            newleftturnvector = {newleftturnvector[1]+lnvector[1] ,newleftturnvector[2]+lnvector[2]}
+            newrightturnvector = {newrightturnvector[1]+rnvector[1],newrightturnvector[2]+rnvector[2]}
+        end
+    elseif type == 0 then
+        if theta == 45 then
+            newleftturnvector = {newleftturnvector[1]+fnhalflvector[1] ,newleftturnvector[2]+fnhalflvector[2]}
+            newrightturnvector = {newrightturnvector[1]+fnhalfrvector[1],newrightturnvector[2]+fnhalfrvector[2]}
+        end
+    end
+
+    if direction == 0 then
+        return {newleftturnvector[1],newleftturnvector[2]}, 360 - theta
+    else
+        return {newrightturnvector[1],newrightturnvector[2]}, theta
+    end
+end
+
+function posbumps(guid, direction)
+    --direction 0 = left 1 = right 2 = forward
+    --direction of bump check
+    local obj = getObjectFromGUID(guid)
+    local pos = obj.getPosition()
+    local rot = obj.getRotation()
+    local rv,cv,lv,fv
+
+    local scale = 0.734
+    if isBigShip(guid) == true then
+        scale = scale * 2
+    end
+    if direction == 1 then
+        rv = {math.sin(math.rad(rot[2]+45))* -1, math.cos(math.rad(rot[2]+45)) * -1}
+        cv = getNormal(rv[1],rv[2])
+    elseif direction == 0 then
+        lv = {math.sin(math.rad(rot[2]-45))* -1, math.cos(math.rad(rot[2]-45))* -1}
+        cv = getNormal(lv[1],lv[2])
+    elseif direction == 2 then
+        fv = {math.sin(math.rad(rot[2]))* -1, math.cos(math.rad(rot[2]))* -1}
+        cv = getNormal(fv[1],fv[2])
+    end
+
+    local Objects = {}
+    for i,ship in ipairs(getAllObjects()) do
+        if ship.tag == 'Figurine' and ship.name ~= '' and ship.getGUID() ~= guid then
+            local shippos = ship.getPosition()
+            local shiprot = ship.getRotation()
+            local sfv = {shippos[1]-pos[1],shippos[3]-pos[3]}
+            local scv = getNormal(sfv[1],sfv[2])
+            local dot = dot2d({cv[1],cv[2]},{scv[1],scv[2]})
+            if dot > 0 then
+                local circledist = distance(pos[1],pos[3],shippos[1],shippos[3])
+                if circledist < 8 then
+                    local perp = calcPerpendicular({pos[1],pos[3]},{cv[1]+pos[1],cv[2]+pos[3]},{shippos[1],shippos[3]})
+                    if perp < 3.2 then
+                        local BumpTable = {}
+                        BumpTable["Position"] = ship.getPosition()
+                        BumpTable["Rotation"] = ship.getRotation()
+                        BumpTable["ShipGUID"] = ship.getGUID()
+                        BumpTable["ShipName"] = ship.getName()
+                        BumpTable.MaxDistance = circledist
+                        Objects[#Objects +1] = BumpTable
+                    end
+                end
+            end
+        end
+    end
+    table.sort(Objects, function(a,b) return a.MaxDistance < b.MaxDistance end)
+    return Objects
+end
+
+function calcPerpendicular(a, b, c)
+    -- a b c vectors x,y
+    -- a b are points on the line
+    -- c is the point to find distance to
+    local slope1 = (b[2]-a[2])/(b[1]-a[1])
+    local yint1 = a[2]-slope1*a[1]
+    local slope2 = -(b[1]-a[1])/(b[2]-a[2])
+    local yint2 = c[2]-slope2*c[1]
+    local x = (yint2-yint1)/(slope1-slope2)
+    local y = slope2*x+yint2
+    return distance(x,y,c[1],c[2])
+end
+
+function getCorners(f,g,rotation,guid)
+    local corners = {}
+    local scale = 0.734
+    if isBigShip(guid) == true then
+        scale = scale * 2
+    end
+    local world_coords = {}
+    world_coords[1] = {f - scale, g + scale}
+    world_coords[2] = {f + scale, g + scale}
+    world_coords[3] = {f + scale, g - scale}
+    world_coords[4] = {f - scale, g - scale}
+    for r, corr in ipairs(world_coords) do
+        local xcoord = f + ((corr[1] - f) * math.sin(math.rad(rotation))) - ((corr[2] - g) * math.cos(math.rad(rotation)))
+        local ycoord = g + ((corr[1] - f) * math.cos(math.rad(rotation))) + ((corr[2] - g) * math.sin(math.rad(rotation)))
+        corners[r] = {xcoord,ycoord}
+    end
+    return corners
+end
+
+function getNormal(x,y)
+    local len = math.sqrt((x*x)+(y*y))
+    return {x/len,y/len}
+end
+
+function getAxis(c1,c2)
+    local axis = {}
+    axis[1] = {c1[2][1]-c1[1][1],c1[2][2]-c1[1][2]}
+    axis[2] = {c1[4][1]-c1[1][1],c1[4][2]-c1[1][2]}
+    axis[3] = {c2[2][1]-c2[1][1],c2[2][2]-c2[1][2]}
+    axis[4] = {c2[4][1]-c2[1][1],c2[4][2]-c2[1][2]}
+    return axis
+end
+
+function dot2d(p,o)
+    return p[1] * o[1] + p[2] * o[2]
+end
+
+function collide(x1, y1, r1, guid1, x2, y2, r2, guid2)
+    local c2 = getCorners(x2, y2, r2, guid2)
+    local c1 = getCorners(x1, y1, r1, guid1)
+    local axis = getAxis(c1,c2)
+    local scalars = {}
+    for i1 = 1, #axis do
+        for i2, set in pairs({c1,c2}) do
+            scalars[i2] = {}
+            for i3, point in pairs(set) do
+                table.insert(scalars[i2],dot2d(point,axis[i1]))
+            end
+        end
+        local s1max = math.max(unpack(scalars[1]))
+        local s1min = math.min(unpack(scalars[1]))
+        local s2max = math.max(unpack(scalars[2]))
+        local s2min = math.min(unpack(scalars[2]))
+        if s2min > s1max or s2max < s1min then
+            return false
+        end
+    end
+    return true
+end
 
 -------------------------------------------------------------------
 ---- START VALADIAN'S AI CODE
@@ -1030,20 +1181,20 @@ currentphase = nil
 turn_marker = nil
 end_marker = nil
 function onload_ai()
---    local aicard = findObjectByName("AI Action Card")
---    if aicard~=nil then
---        local prebutton = {['click_function'] = 'Action_Planning', ['label'] = 'Planning', ['position'] = {0, 0.3, -1.5}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 400, ['font_size'] = 250}
---        aicard.createButton(prebutton)
---
---        local flipbutton = {['click_function'] = 'Action_Activation', ['label'] = 'Activation', ['position'] = {0, 0.3, -0.5}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 400, ['font_size'] = 250}
---        aicard.createButton(flipbutton)
---
---        local attackbutton = {['click_function'] = 'Action_Combat', ['label'] = 'Combat', ['position'] = {0, 0.3, 0.5}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 400, ['font_size'] = 250}
---        aicard.createButton(attackbutton)
---
---        local clearbutton = {['click_function'] = 'Action_End', ['label'] = 'End', ['position'] = {0, 0.3, 1.5}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 400, ['font_size'] = 250}
---        aicard.createButton(clearbutton)
---    end
+    --    local aicard = findObjectByName("AI Action Card")
+    --    if aicard~=nil then
+    --        local prebutton = {['click_function'] = 'Action_Planning', ['label'] = 'Planning', ['position'] = {0, 0.3, -1.5}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 400, ['font_size'] = 250}
+    --        aicard.createButton(prebutton)
+    --
+    --        local flipbutton = {['click_function'] = 'Action_Activation', ['label'] = 'Activation', ['position'] = {0, 0.3, -0.5}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 400, ['font_size'] = 250}
+    --        aicard.createButton(flipbutton)
+    --
+    --        local attackbutton = {['click_function'] = 'Action_Combat', ['label'] = 'Combat', ['position'] = {0, 0.3, 0.5}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 400, ['font_size'] = 250}
+    --        aicard.createButton(attackbutton)
+    --
+    --        local clearbutton = {['click_function'] = 'Action_End', ['label'] = 'End', ['position'] = {0, 0.3, 1.5}, ['rotation'] =  {0, 0, 0}, ['width'] = 1200, ['height'] = 400, ['font_size'] = 250}
+    --        aicard.createButton(clearbutton)
+    --    end
     turn_marker = findObjectByName("Turn Marker")
     end_marker = findObjectByName("End Marker")
 end
@@ -1152,12 +1303,12 @@ function auto(guid)
     local ai = getObjectFromGUID(guid)
     --local tgtGuid
     local squad = getAiSquad(ai)
---    if aitype[guid] == 'strike' then
---        tgtGuid = striketarget
---        printToAll(ai.getName() .. " is STRIKE AI",{0,1,0})
---    else
---        tgtGuid = findNearestPlayer(guid)
---    end
+    --    if aitype[guid] == 'strike' then
+    --        tgtGuid = striketarget
+    --        printToAll(ai.getName() .. " is STRIKE AI",{0,1,0})
+    --    else
+    --        tgtGuid = findNearestPlayer(guid)
+    --    end
     local tgt = findAiTarget(guid)
     if tgt == nil then
         printToAll('Error: AI ' .. ai.getName() .. ' has no target',{0.2, 0.2, 0.8})
@@ -1165,22 +1316,22 @@ function auto(guid)
     else
         local move
         if aitype[guid]~=nil and aitype[guid]:match 'flee_(%a)' then
-                local direction = string.lower(aitype[guid]:match 'flee_(%a)')
-                local offsets = {
-                    e = {12,0,0},
-                    s = {0, 0, -12},
-                    w = {-12, 0, 0},
-                    n = {0, 0, 12}
-                }
-                local aiPos = ai.getPosition()
-                local aiForward = getForwardVector(guid)
-                local tgtPos = add(ai.getPosition(), offsets[direction])
-                local offset = {tgtPos[1] - aiPos[1],0,tgtPos[3] - aiPos[3]}
-                local angle = math.atan2(offset[3], offset[1]) - math.atan2(aiForward[3], aiForward[1])
-                if angle < 0 then
-                    angle = angle + 2 * math.pi
-                end
-                move = getMove(getAiType(ai),angle,12,true,true)
+            local direction = string.lower(aitype[guid]:match 'flee_(%a)')
+            local offsets = {
+                e = {12,0,0},
+                s = {0, 0, -12},
+                w = {-12, 0, 0},
+                n = {0, 0, 12}
+            }
+            local aiPos = ai.getPosition()
+            local aiForward = getForwardVector(guid)
+            local tgtPos = add(ai.getPosition(), offsets[direction])
+            local offset = {tgtPos[1] - aiPos[1],0,tgtPos[3] - aiPos[3]}
+            local angle = math.atan2(offset[3], offset[1]) - math.atan2(aiForward[3], aiForward[1])
+            if angle < 0 then
+                angle = angle + 2 * math.pi
+            end
+            move = getMove(getAiType(ai),angle,12,true,true)
         else
             -- local tgt = getObjectFromGUID(tgtGuid)
             -- aitargets[guid] = tgt
@@ -1259,7 +1410,7 @@ function executeMove(ai, move)
     if string.find(move,'*') then
         aistressed[ai.getGUID()] = true
         ai_stress = true
---        printToAll('[STRESS - No Action]',{1, 0, 0})
+        --        printToAll('[STRESS - No Action]',{1, 0, 0})
     end
 end
 function Render_ButtonState(object)
@@ -1333,8 +1484,8 @@ function Render_SwerveLeft(object)
 
     local swerves = getSwerve(getAiType(object),move)
     if swerves ~= nil and swerves[1] ~= nil then -- and aiswerved[object.getGUID()]~=true
-        local swerve = {['click_function'] = 'Action_SwerveLeft', ['label'] = swerves[1], ['position'] = {-1.0, 0.3, 1.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 450, ['height'] = 300, ['font_size'] = 300}
-        object.createButton(swerve)
+    local swerve = {['click_function'] = 'Action_SwerveLeft', ['label'] = swerves[1], ['position'] = {-1.0, 0.3, 1.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 450, ['height'] = 300, ['font_size'] = 300}
+    object.createButton(swerve)
     end
 end
 function Action_SwerveLeft(object)
@@ -1348,8 +1499,8 @@ function Render_SwerveRight(object)
 
     local swerves = getSwerve(getAiType(object),move)
     if swerves ~= nil and swerves[2] ~= nil then -- and aiswerved[object.getGUID()]~=true
-        local swerve = {['click_function'] = 'Action_SwerveRight', ['label'] = swerves[2], ['position'] = {1.0, 0.3, 1.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 450, ['height'] = 300, ['font_size'] = 300}
-        object.createButton(swerve)
+    local swerve = {['click_function'] = 'Action_SwerveRight', ['label'] = swerves[2], ['position'] = {1.0, 0.3, 1.6}, ['rotation'] =  {0, 0, 0}, ['width'] = 450, ['height'] = 300, ['font_size'] = 300}
+    object.createButton(swerve)
     end
 end
 function Action_SwerveRight(object)
@@ -1916,11 +2067,11 @@ function UpdatePlanningNote()
                 local statuscolor = "FF0000"
                 local found = ship.getVar('HasDial')
                 local maneuver = ""
---                for j,card in ipairs(getAllObjects()) do
---                    if isInPlay(card) and card.tag ~= 'Figurine' and card.getName()==ship.getName() then
---                        found = true
---                    end
---                end
+                --                for j,card in ipairs(getAllObjects()) do
+                --                    if isInPlay(card) and card.tag ~= 'Figurine' and card.getName()==ship.getName() then
+                --                        found = true
+                --                    end
+                --                end
                 total = total + 1
                 if found then
                     status = "Ready"
@@ -2041,7 +2192,7 @@ function FindNextAi(guid, sort)
     end
     table.sort(ais,sort)
     -- for i,ship in ipairs(ais) do
-        -- printToAll("Searching "..prettyString(ship),{1,1,1})
+    -- printToAll("Searching "..prettyString(ship),{1,1,1})
     -- end
     local selffound = false
     for i,ship in ipairs(ais) do
@@ -2207,15 +2358,15 @@ function Action_AiUndoBoostBarrel(object)
     object.setDescription("q")
     airollboosted[object.getGUID()]=nil
     Render_ButtonState(object)
---    Render_Ruler(object)
---
---    if getAiHasBoost(object) then
---        Render_Boost(object)
---    end
---
---    if getAiHasBarrelRoll(object) then
---        Render_BarrelRoll(object)
---    end
+    --    Render_Ruler(object)
+    --
+    --    if getAiHasBoost(object) then
+    --        Render_Boost(object)
+    --    end
+    --
+    --    if getAiHasBarrelRoll(object) then
+    --        Render_BarrelRoll(object)
+    --    end
 end
 
 function Render_Ruler(object)
@@ -2559,7 +2710,7 @@ end
 function getAiNumber(ai)
     local num = ai.getName():match '#(%d+)'
     if num == nil then return "0" else return num end
-    end
+end
 function getAiHasBoost(ai)
     local type = getAiType(ai)
     return type == "INT"
@@ -2776,7 +2927,7 @@ function Action_setupclear(object)
             --is AI, card, or damage marker
             if isAi(obj) or obj.tag=="Card" or obj.tag=="Deck" or obj.tag=="Chip" or obj.getName():match "Asteroid"or obj.getName():match "Debrisfield" then
                 obj.destruct()
-            --is player
+                --is player
             elseif not isAi(obj) and isShip(obj) and getSkill(obj)~=nil then
                 local newpos = obj.getPosition()
                 obj.setPosition({newpos[1],newpos[2],-16})
@@ -2817,12 +2968,12 @@ function Action_setup(object)
             table.insert(missionsquads, {name="Beta",turn=0,vector=4,ai="attack",type="TIE",count={1,0,1,0,1,0}, elite=false})
             table.insert(missionsquads, {name="Gamma",turn=4,vector="1d6",ai="attack",type="INT",count={1,0,0,1,0,0}, elite=false})
             table.insert(missionsquads, {name="Delta",turn=7,vector="1d6",ai="attack",type="TIE",count={0,1,1,0,1,1}, elite=false})
---            table.insert(missionvectors, {x=-4.5, y=-1.5, rot=90})
---            table.insert(missionvectors, {x=-4.5, y= 1.5, rot=90})
---            table.insert(missionvectors, {x=-1.5, y= 4.5, rot=180})
---            table.insert(missionvectors, {x= 1.5, y= 4.5, rot=180})
---            table.insert(missionvectors, {x= 4.5, y= 1.5, rot=-90})
---            table.insert(missionvectors, {x= 4.5, y=-1.5, rot=-90})
+            --            table.insert(missionvectors, {x=-4.5, y=-1.5, rot=90})
+            --            table.insert(missionvectors, {x=-4.5, y= 1.5, rot=90})
+            --            table.insert(missionvectors, {x=-1.5, y= 4.5, rot=180})
+            --            table.insert(missionvectors, {x= 1.5, y= 4.5, rot=180})
+            --            table.insert(missionvectors, {x= 4.5, y= 1.5, rot=-90})
+            --            table.insert(missionvectors, {x= 4.5, y=-1.5, rot=-90})
             missionvectors = {v._0830,v._0930, v._1130, v._0030,v._0230,v._0330}
         end
         if mission == "Rescue Rebel Operatives" then
@@ -3086,27 +3237,27 @@ function Action_setup(object)
                 {x=1.5,y=-1.5,rot=270}, --E
                 {x=1.5,y=1.5,rot=0}, --F
                 {x=0,y=0,rot=180}    --center
-                }
+            }
         end
         if mission == "Test" then
---            shipnum = 1
---            Spawn_Squad(1,"TIE","Alpha",4, false)
---            Spawn_Squad(2,"INT","Beta",3, false)
---            Spawn_Squad(3,"ADV","Beta",2, false)
---            Spawn_Squad(4,"BOM","Gamma",1, false)
---            Spawn_Squad(5,"DEF","Gamma",3, false)
---            Spawn_Squad(6,"PHA","Gamma",4, false)
---            Spawn_Squad(7,"SHU","Gamma",1, false)
---            Spawn_Squad(8,"DEC","Gamma",1, false)
+            --            shipnum = 1
+            --            Spawn_Squad(1,"TIE","Alpha",4, false)
+            --            Spawn_Squad(2,"INT","Beta",3, false)
+            --            Spawn_Squad(3,"ADV","Beta",2, false)
+            --            Spawn_Squad(4,"BOM","Gamma",1, false)
+            --            Spawn_Squad(5,"DEF","Gamma",3, false)
+            --            Spawn_Squad(6,"PHA","Gamma",4, false)
+            --            Spawn_Squad(7,"SHU","Gamma",1, false)
+            --            Spawn_Squad(8,"DEC","Gamma",1, false)
         end
 
         for i,squad in ipairs(missionsquads) do
             Spawn_Squad(squad)
         end
---        local rules1 = findObjectByName("Rules Page 1")
---        rules1.setState(rule_page)
---        local rules2 = findObjectByName("Rules Page 2")
---        rules2.setState(rule_page+1)
+        --        local rules1 = findObjectByName("Rules Page 1")
+        --        rules1.setState(rule_page)
+        --        local rules2 = findObjectByName("Rules Page 2")
+        --        rules2.setState(rule_page+1)
         startLuaCoroutine(nil, 'spawnAllAsteroidsCoroutine')
         turn_marker.setPosition({turn_marker.getPosition()[1],turn_marker.getPosition()[2],13.3})
         end_marker.setPosition({end_marker.getPosition()[1],end_marker.getPosition()[2],13.3-2.59*(turns-1)})
@@ -3132,10 +3283,10 @@ function spawnAllAsteroidsCoroutine()
         params.rotation = {0,math.random(360),0}
         params.callback = 'setAsteroidState'
         params.callback_owner = Global
---        local callback_params = {}
---        --local state = mod(i_roll-1,6)+1
---        callback_params['index'] = i
---        callback_params['state'] = i_roll
+        --        local callback_params = {}
+        --        --local state = mod(i_roll-1,6)+1
+        --        callback_params['index'] = i
+        --        callback_params['state'] = i_roll
         params.params = {index = i, state = i_roll}
         if i_roll==1 then
             asteroids[i] = core_source.takeObject(params)
@@ -3185,10 +3336,10 @@ function findClearPosition()
 end
 function isClear(pos)
     for i,asteroid in ipairs(getAllObjects()) do
-       if asteroid.getName():match "Asteroid" or asteroid.getName():match "DebrisField" then
-           local astpos = asteroid.getPosition()
-           if distance(pos[1],pos[3],astpos[1],astpos[3])<5.5 then return false end
-       end
+        if asteroid.getName():match "Asteroid" or asteroid.getName():match "DebrisField" then
+            local astpos = asteroid.getPosition()
+            if distance(pos[1],pos[3],astpos[1],astpos[3])<5.5 then return false end
+        end
     end
     return true
 end
@@ -3209,11 +3360,11 @@ PS =  {
 squad_offsets = {{0,0,0},{2.2,0,0},{0,0,2.2},{2.2,0,2.2} }
 
 squad_types = {"INT","INT","INT","INT","INT","INT",
-               "BOM","BOM","BOM","BOM","BOM","BOM",
-               "ADV","ADV","ADV","ADV",
-               "DEF","DEF","DEF","DEF",
-               "PHA","PHA","PHA","PHA",
-               "SHU","SHU","SHU","SHU" }
+    "BOM","BOM","BOM","BOM","BOM","BOM",
+    "ADV","ADV","ADV","ADV",
+    "DEF","DEF","DEF","DEF",
+    "PHA","PHA","PHA","PHA",
+    "SHU","SHU","SHU","SHU" }
 placement_offset = {
     {0,0,0.25},
     {1.46,0,0.25},
@@ -3269,7 +3420,7 @@ function countSquad(squad)
     for i,s in ipairs(squad.count) do
         if s>0 and s<=mission_ps and i<=mission_players then number = number+1 end
         if s<0 and s>=-mission_ps and i<=mission_players then number = number-1 end
-        end
+    end
     return number
 end
 --INT 6
