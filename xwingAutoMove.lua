@@ -9,7 +9,6 @@ undolist = {}
 undopos = {}
 undorot = {}
 namelist1 = {}
-locktimer = {}
 
 --Auto Dials
 dialpositions = {}
@@ -18,6 +17,7 @@ dialpositions = {}
 BigShipList = {'https://paste.ee/r/LIxnJ','https://paste.ee/r/v9OYL','https://paste.ee/r/XoXqn','https://paste.ee/r/oOjRN','https://paste.ee/r/v8OYL','https://paste.ee/r/xBpMo','https://paste.ee/r/k4DLM','https://paste.ee/r/JavTd','http://pastebin.com/Tg5hdRTM'}
 
 -- Auto Actions
+freshLock = nil
 enemy_target_locks = nil
 focus = nil --'beca0f'
 evade = nil --'4a352e'
@@ -31,9 +31,9 @@ function onload()
     focus = findObjectByNameAndType("Focus", "Infinite").getGUID()
     evade = findObjectByNameAndType("Evade", "Infinite").getGUID()
     stress = findObjectByNameAndType("Stress", "Infinite").getGUID()
-    target = findObjectByNameAndType("Target Lock", "Infinite").getGUID()
-    --VALADIAN IGNORE PLAYER CHECK
-    if ignorePlayerCheck then return true end
+    target = findObjectByNameAndType("Target Locks", "Infinite").getGUID()
+    --VALADIAN onload
+    onload_ai()
 end
 
 function onObjectLeaveScriptingZone(zone, object)
@@ -44,16 +44,23 @@ function onObjectLeaveScriptingZone(zone, object)
         if CardData ~= nil then
             local obj = getObjectFromGUID(CardData["ShipGUID"])
             if obj.getVar('HasDial') == true then
-                printToColor(CardData["ShipName"] .. ' already has a dial.', object.held_by_color, {0.2,0.2,0.8})
+                ---DELETE ME (if statement) but keep the print
+                if CardData["HasButtons"] == false then
+                    printToColor(CardData["ShipName"] .. ' already has a dial.', object.held_by_color, {0.2,0.2,0.8})
+                else
+                    CardData["LeftZone"] = true
+                end
             else
                 obj.setVar('HasDial', true)
+				--VALADIAN Set maneuver for Planning display
+                obj.setVar('Maneuver', object.getDescription())
                 CardData["Color"] = object.held_by_color
-
+                CardData["LeftZone"] = true
+                CardData["HasButtons"] = true
                 local flipbutton = {['click_function'] = 'CardFlipButton', ['label'] = 'Flip', ['position'] = {0, -1, 1}, ['rotation'] =  {0, 0, 180}, ['width'] = 750, ['height'] = 550, ['font_size'] = 250}
                 object.createButton(flipbutton)
                 local deletebutton = {['click_function'] = 'CardDeleteButton', ['label'] = 'Delete', ['position'] = {0, -1, -1}, ['rotation'] =  {0, 0, 180}, ['width'] = 750, ['height'] = 550, ['font_size'] = 250}
                 object.createButton(deletebutton)
-
                 object.setVar('Lock',true)
             end
         else
@@ -62,9 +69,30 @@ function onObjectLeaveScriptingZone(zone, object)
     end
 end
 
+
+function onObjectEnterScriptingZone(zone, object)
+    --VALADIAN MISSION ZONE HANDLING
+    onObjectEnterScriptingZone_ai(zone,object)
+    ---DELETE ME ALL OF ME HERE
+    if dialpositions[1] ~= nil then
+        local CardData = dialpositions[CardInArray(object.GetGUID())]
+        if CardData ~= nil then
+            CardData["LeftZone"] = false
+        end
+    end
+end
+
 function PlayerCheck(Color, GUID)
-    --VALADIAN IGNORE PLAYER CHECK
-    if ignorePlayerCheck then return true end
+    ---DELETE ME
+    local CardData = dialpositions[CardInArray(GUID)]
+    if CardData["LeftZone"] == true then
+        --VALADIAN IGNORE PLAYER CHECK
+        if ignorePlayerCheck then return true end
+    else
+        printToColor('Due to TTS Bug -- cannot use buttons down here. Unlock. Drag to main play area and click buttons there.', CardData["Color"], {0.4,0.6,0.2})
+        return false
+    end
+    -----
     local PC = false
     if getPlayer(Color) ~= nil then
         local HandPos = getPlayer(Color).getPointerPosition()
@@ -344,7 +372,13 @@ function CardDeleteButton(object)
         object.clearButtons()
         object.setPosition (CardData["Position"])
         object.setRotation (CardData["Rotation"])
+        object.setVar('Lock',false)
         CardData["Color"] = nil
+        ---DELETE ME x2
+        CardData["HasButtons"] = false
+        CardData["LeftZone"] = false
+		--VALADIAN next on maneuver deletion 
+        object.setDescription("ai next")
     end
 end
 
@@ -394,6 +428,10 @@ function checkdials(guid)
                         cardtable["RangeDisplayed"] = false
                         cardtable["RulerObject"] = nil
                         cardtable["Color"] = nil
+                        ---DELETE ME
+                        cardtable["LeftZone"] = false
+                        cardtable["HasButtons"] = false
+                        --------END DELETE ME
                         obj.setVar('HasDial',false)
                         dialpositions[#dialpositions +1] = cardtable
                         card.setName(obj.getName())
@@ -476,7 +514,6 @@ function round(x)
     --Can you be Deleted?
     return x>=0 and math.floor(x+0.5) or math.ceil(x-0.5)
 end
-local freshLock
 function take(parent, guid, xoff, yoff, zoff, TL, color, name)
     local obj = getObjectFromGUID(guid)
     local objp = getObjectFromGUID(parent)
@@ -503,8 +540,9 @@ function setNewLock(object, params)
 end
 
 function undo(guid)
+    local obj
     if undolist[guid] ~= nil then
-        local obj = getObjectFromGUID(guid)
+        obj = getObjectFromGUID(guid)
         obj.setPosition(undopos[guid])
         obj.setRotation(undorot[guid])
         setpending(guid)
@@ -586,6 +624,7 @@ end
 function ruler(guid,action)
     -- action for 1 for display button 2 for not
     local shipobject = getObjectFromGUID(guid)
+    shipobject.clearButtons()
     local shipname = shipobject.getName()
     local direction = shipobject.getRotation()
     local world = shipobject.getPosition()
@@ -649,13 +688,14 @@ function notify(guid,move,text,ship)
     end
     local obj = getObjectFromGUID(guid)
     local name = obj.getName()
+    name = string.gsub(name,":","|")
     if move == 'q' then
         printToAll(name .. ' executed undo.', {0, 1, 0})
     elseif move == 'set' then
         printToAll(name .. ' set name.', {0, 1, 1})
     elseif move == 'r' then
         printToAll(name .. ' spawned a ruler.', {0.2, 0.2, 0.8})
-    elseif move == 'action' then
+elseif move == 'action' then
         printToAll(name .. ' ' .. text .. '.', {0.959999978542328 , 0.439000010490417 , 0.806999981403351})
     elseif move == 'keep' then
         printToAll(name .. ' stored his position.', {0.5, 0, 1})
@@ -2538,18 +2578,18 @@ function Action_TargetLock(object)
     local target = findAiTarget(object.getGUID())
     local dist = realDistance(target.getGUID(),object.getGUID())
     if target~=nil and dist<10.9 then
-        take(enemy_target_locks.getGUID(), target.getGUID(),0.37,1,-0.37,true,"Red",getSimpleAiName(object))
+        take(enemy_target_locks, target.getGUID(),0.37,1,-0.37,true,"Red",getSimpleAiName(object))
         notify(object.getGUID(),'action','acquires a target lock')
     else
         notify(object.getGUID(),'action','has no target')
     end
 end
 function Action_Focus(object)
-    take(focus.getGUID(), object.getGUID(),-0.37,1,-0.37)
+    take(focus, object.getGUID(),-0.37,1,-0.37)
     notify(object.getGUID(),'action','takes a focus token')
 end
 function Action_Evade(object)
-    take(evade.getGUID(), object.getGUID(),-0.37,1,0.37)
+    take(evade, object.getGUID(),-0.37,1,0.37)
     notify(object.getGUID(),'action','takes an evade token')
 end
 
@@ -2656,7 +2696,7 @@ function findNearestPlayer(guid)
 end
 function findCorners(object)
     local scalar = 0.85
-    if object.getName():match '%LGS$' then scalar = 1.63 end
+    if isBigShip(object.getGUID()) then scalar = 1.63 end
     local forward = getForwardVector(object.getGUID())
     local f = {forward[1] * scalar, 0, forward[3] * scalar}
     local corners = {}
@@ -2674,8 +2714,8 @@ function realDistance(guid1, guid2)
     local bpos = b.getPosition()
     if a == nil or b == nil then return nil end
     local dist = distance(apos[1],apos[3],bpos[1],bpos[3])
-    if a.getName():match '%LGS$' then dist = dist - 2.1 else dist = dist - 1.1 end
-    if b.getName():match '%LGS$' then dist = dist - 2.1 else dist = dist - 1.1 end
+    if isBigShip(a.getGUID()) then dist = dist - 2.1 else dist = dist - 1.1 end
+    if isBigShip(b.getGUID()) then dist = dist - 2.1 else dist = dist - 1.1 end
     return dist
 end
 
@@ -2758,7 +2798,7 @@ function log(string)
     printToAll("[" .. os.date("%H:%M:%S") .. "] " .. string,{0.2, 0.2, 0.8})
 end
 
-function onObjectEnterScriptingZone(zone, object)
+function onObjectEnterScriptingZone_ai(zone, object)
     if zone.getGUID() == missionzone and object~=nil and object.tag == 'Card' and object.getName():match '^Mission: (.*)' then
         object.clearButtons()
         local p = {['click_function'] = 'Action_presetup', ['label'] = 'Pre-Setup', ['position'] = {0, 0.5, -1.0}, ['rotation'] =  {0, 0, 0}, ['width'] = 800, ['height'] = 200, ['font_size'] = 180}
@@ -3118,7 +3158,7 @@ function Action_setup(object)
             table.insert(missionsquads, {name="Gamma",turn=8,vector="1d6",ai="attack",type="INT",count={0,0,0,4,0,6}, elite=false})
 
             missionvectors = {v._0830,v._0930, v._1130, v._0030,v._0230,v._0330}
-            --TODO: implement ion storm spawning5
+            --TODO: implement ion storm spawning
             --TODO: implement spawning partial stations on side
         end
         if mission == "Revenge" then
@@ -3162,7 +3202,6 @@ function Action_setup(object)
             table.insert(missionsquads, {name="Epsilon",turn=0,vector=5,ai="strike",type="TIE",count={1,1,1,-6,1,-4}, elite=false})
             table.insert(missionsquads, {name="Epsilon",turn=0,vector=5,ai="strike",type="*",count={0,0,0,6,0,4}, elite=false})
             missionvectors = {v._1100,v._1120,v._0020, v._0040, v._0100, {x=0, y=-2,rot=180}}
-            --TODO: implement debris spawning
         end
         if mission == "Miners' Strike" then
             turns = 12
@@ -3439,6 +3478,7 @@ function Spawn_Ship(type, name, elite, ai, card, position, rotation, temp_pos)
 
     obj_parameters.rotation = { 0, 180+rotation, 0 }
     local newship = spawnObject(obj_parameters)
+    newship.scale({0.625,0.625,0.625})
     local custom = {}
     custom.mesh = MESH[type]
     custom.diffuse = DIFFUSE[type]
@@ -3463,7 +3503,6 @@ function Spawn_Ship(type, name, elite, ai, card, position, rotation, temp_pos)
     Spawn_Card(type, name, temp_pos, shipnum, card)
     shipnum = shipnum + 1
 
-    newship.scale({0.6327,0.6327,0.6327})
     --newship.lock()
 end
 pilot_card_offsets = {TIE=0,INT=1,BOM=7,ADV=13, DEF=17, PHA=21, SHU=25 }
@@ -3471,6 +3510,7 @@ pilot_card_num = {TIE=1,INT=6,BOM=6,ADV=4,DEF=4,PHA=4,SHU=4}
 decks = {}
 cards = {}
 function Spawn_Card(type, name, position, shipnum, card)
+    if pilot_card_num[type]==nil then return end
     local pilots = findObjectByNameAndType("Imperial Pilots","Infinite")
     local params = {}
     -- params.position = pilots.getPosition()
