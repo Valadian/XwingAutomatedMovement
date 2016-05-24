@@ -358,9 +358,9 @@ end
 function CardUndoButton(object)
     local CardData = dialpositions[CardInArray(object.GetGUID())]
     if PlayerCheck(CardData["Color"],CardData["GUID"]) == true then
-        check(CardData["ShipGUID"],'undo')
         CardData["BoostDisplayed"] = false
         CardData["BarrelRollDisplayed"] = false
+        check(CardData["ShipGUID"],'undo')
     end
 end
 
@@ -378,7 +378,7 @@ function CardDeleteButton(object)
         CardData["HasButtons"] = false
         CardData["LeftZone"] = false
 		--VALADIAN next on maneuver deletion 
-        object.setDescription("ai next")
+        getObjectFromGUID(CardData["ShipGUID"]).setDescription("ai next")
     end
 end
 
@@ -540,17 +540,13 @@ function setNewLock(object, params)
 end
 
 function undo(guid)
-    local obj
+    local obj = getObjectFromGUID(guid)
     if undolist[guid] ~= nil then
-        obj = getObjectFromGUID(guid)
         obj.setPosition(undopos[guid])
         obj.setRotation(undorot[guid])
-        setpending(guid)
-    else
-        local obj = getObjectFromGUID(guid)
-        setpending(guid)
     end
     obj.Unlock()
+    setpending(guid)
 end
 
 function distance(x,y,a,b)
@@ -624,6 +620,7 @@ end
 function ruler(guid,action)
     -- action for 1 for display button 2 for not
     local shipobject = getObjectFromGUID(guid)
+    --VALADIAN clear buttons
     shipobject.clearButtons()
     local shipname = shipobject.getName()
     local direction = shipobject.getRotation()
@@ -669,10 +666,29 @@ function actionButton(object)
     --VALADIAN REDRAW BUTTON STATE
     Render_ButtonState(ship)
 end
+function BumpButton(guid)
+    local obj = getObjectFromGUID(guid)
+    obj.clearButtons()
+    local button = {}
+    if isBigShip(guid) == true then
+        button = {['click_function'] = 'deletebump', ['label'] = 'BUMPED', ['position'] = {0, 0.2, 2}, ['rotation'] =  {0, 0, 0}, ['width'] = 1000, ['height'] = 350, ['font_size'] = 250}
+    else
+        button = {['click_function'] = 'deletebump', ['label'] = 'BUMPED', ['position'] = {0, 0.3, 0.8}, ['rotation'] =  {0, 0, 0}, ['width'] = 1000, ['height'] = 350, ['font_size'] = 250}
+    end
+    obj.createButton(button)
+end
+
+function deletebump(object)
+    object.clearButtons()
+    --VALADIAN REDRAW BUTTON STATE
+    Render_ButtonState(object)
+end
+
 
 function isBigShip(guid)
     local obj = getObjectFromGUID(guid)
     local Properties = obj.getCustomObject()
+    --printToAll('"'..Properties.collider..'"',{1,0,0})
     for i,ship in pairs(BigShipList) do
         if Properties.collider == ship then
             return true
@@ -787,7 +803,7 @@ function check(guid,move)
     elseif move == 'br2s' then
         turnShip(guid,5.490753857,1,0,true,move,'segnors looped right 2')
     elseif move == 'br3s' then
-        turnShip(guid,7.363015996,0,0,true,move,'segnors looped right 3')
+        turnShip(guid,7.363015996,1,0,true,move,'segnors looped right 3')
 
         -- Barrel Roll Commands
     elseif move == 'xl' or move == 'xe' then
@@ -918,12 +934,12 @@ function turnShip(guid,radius,direction,type,kturn,move,text)
     local coords,theta = turncoords(guid,radius,direction,degree,type)
     if BumpingObjects ~= nil then
         for k=#BumpingObjects ,1,-1 do
-            local doescollide = collide(pos[1]+coords[1],pos[3]+coords[2],theta,guid,BumpingObjects[k]["Position"][1],BumpingObjects[k]["Position"][3],BumpingObjects[k]["Rotation"][2],BumpingObjects[k]["ShipGUID"])
+            local doescollide = collide(pos[1]+coords[1],pos[3]+coords[2],rot[2]+theta,guid,BumpingObjects[k]["Position"][1],BumpingObjects[k]["Position"][3],BumpingObjects[k]["Rotation"][2],BumpingObjects[k]["ShipGUID"])
             if doescollide == true then
                 for e2=degree, 1, -1 do
                     local checkdegree = e2
                     coords,theta = turncoords(guid,radius,direction,checkdegree,type)
-                    local doescollide2 = collide(pos[1]+coords[1],pos[3]+coords[2],theta,guid,BumpingObjects[k]["Position"][1],BumpingObjects[k]["Position"][3],BumpingObjects[k]["Rotation"][2],BumpingObjects[k]["ShipGUID"])
+                    local doescollide2 = collide(pos[1]+coords[1],pos[3]+coords[2],rot[2]+theta,guid,BumpingObjects[k]["Position"][1],BumpingObjects[k]["Position"][3],BumpingObjects[k]["Rotation"][2],BumpingObjects[k]["ShipGUID"])
                     if doescollide2 == false then
                         degree = checkdegree
                         Bumped = {true, k}
@@ -939,6 +955,7 @@ function turnShip(guid,radius,direction,type,kturn,move,text)
     end
     obj.Rotate({0, theta, 0})
     if Bumped[1] == true then
+        BumpButton(guid)
         notify(guid,move,text,BumpingObjects[Bumped[2]]["ShipName"])
     else
         notify(guid,move,text)
@@ -989,6 +1006,7 @@ function straight(guid,forwardDistance,kturn,move,text)
         obj.Rotate({0, 0, 0})
     end
     if Bumped[1] == true then
+        BumpButton(guid)
         notify(guid,move,text,BumpingObjects[Bumped[2]]["ShipName"])
     else
         notify(guid,move,text)
@@ -1979,6 +1997,7 @@ end
 --end
 
 function Action_End()
+    --TODO: clear all buttons
     for i,obj in ipairs(getAllObjects()) do
         if isInPlay(obj) and isTemporary(obj) then
             obj.destruct()
@@ -2954,7 +2973,7 @@ function CalculatePlayerSkill()
             ps = ps + getSkill(ship)
         end
     end
-    local avg_ps = round(ps/count)
+    local avg_ps = math.floor(ps/count)
     printToAll("Average Pilot Skill: "..avg_ps,{0,1,1})
     mission_ps = avg_ps
     return avg_ps
@@ -3248,7 +3267,7 @@ function Action_setup(object)
             table.insert(missionsquads, {name="Delta",turn=8,vector="1d6",ai="attack",type="TIE",count={1,-8,1,-6,1,-4}, elite=false})
             table.insert(missionsquads, {name="Delta",turn=8,vector="1d6",ai="attack",type="*",count={0,8,0,6,0,4}, elite=false})
             --TODO: implement random filters
-            missionvectors = {v._920,v._1030S,v._1130,v._0030,v._0130S,v._0240}
+            missionvectors = {v._0920,v._1030S,v._1130,v._0030,v._0130S,v._0240}
 
         end
         if mission == "Pride of the Empire" then
