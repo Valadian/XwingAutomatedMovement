@@ -13,6 +13,9 @@ namelist1 = {}
 --Auto Dials
 dialpositions = {}
 
+--Auto Token Movement
+tokenInfo = {}
+
 --Collider Infomation
 BigShipList = {'https://paste.ee/r/LIxnJ','https://paste.ee/r/v9OYL','https://paste.ee/r/XoXqn','https://paste.ee/r/oOjRN','https://paste.ee/r/v8OYL','https://paste.ee/r/xBpMo','https://paste.ee/r/k4DLM','https://paste.ee/r/JavTd','http://pastebin.com/Tg5hdRTM'}
 
@@ -26,14 +29,73 @@ target = nil --'c81580'
 
 ignorePlayerCheck = true
 
-function onload()
+function onload(save_string)
+
     enemy_target_locks = findObjectByNameAndType("Enemy Target Locks", "Infinite").getGUID()
     focus = findObjectByNameAndType("Focus", "Infinite").getGUID()
     evade = findObjectByNameAndType("Evade", "Infinite").getGUID()
     stress = findObjectByNameAndType("Stress", "Infinite").getGUID()
     target = findObjectByNameAndType("Target Locks", "Infinite").getGUID()
+    if save_string ~= "" then
+        local data = JSON.decode(save_string)
+        for i, card in pairs(data) do
+            local cardtable = {}
+            local obj = getObjectFromGUID(card["GUID"])
+            cardtable["GUID"] = card["GUID"]
+            cardtable["Position"] = {card["Positionx"],card["Positiony"],card["Positionz"]}
+            cardtable["Rotation"] = {card["Rotationx"],card["Rotationy"],card["Rotationz"]}
+            cardtable["ShipGUID"] = card["ShipGUID"]
+            cardtable["ShipName"] = card["ShipName"]
+            cardtable["ActionDisplayed"] = card["ActionDisplayed"]
+            cardtable["BoostDisplayed"] = card["BoostDisplayed"]
+            cardtable["BarrelRollDisplayed"] = card["BarrelRollDisplayed"]
+            cardtable["RangeDisplayed"] = card["RangeDisplayed"]
+            cardtable["RulerObject"] = card["RulerObject"]
+            cardtable["Color"] = nil
+            ---DELETE ME x2
+            cardtable["LeftZone"] = false
+            cardtable["HasButtons"] = false
+            if obj~=nil then
+                obj.Unlock()
+                obj.clearButtons()
+                obj.setPosition ({card["Positionx"],card["Positiony"],card["Positionz"]})
+                obj.setRotation ({card["Rotationx"],card["Rotationy"],card["Rotationz"]})
+                obj.setVar('Lock',false)
+                obj.setName( card["ShipName"])
+                getObjectFromGUID(card["ShipGUID"]).setVar('HasDial',false)
+            end
+            dialpositions[#dialpositions +1] = cardtable
+        end
+    end
     --VALADIAN onload
     onload_ai()
+end
+
+function onSave()
+    local save = {}
+    for i, card in ipairs(dialpositions) do
+        local data = {}
+        data["GUID"] = card["GUID"]
+        data["Positionx"] = card["Position"][1]
+        data["Positiony"] = card["Position"][2]
+        data["Positionz"] = card["Position"][3]
+        data["Rotationx"] = card["Rotation"][1]
+        data["Rotationy"] = card["Rotation"][2]
+        data["Rotationz"] = card["Rotation"][3]
+        data["ShipGUID"] = card["ShipGUID"]
+        data["ShipName"] = card["ShipName"]
+        data["ActionDisplayed"] = card["ActionDisplayed"]
+        data["BoostDisplayed"] = card["BoostDisplayed"]
+        data["BarrelRollDisplayed"] = card["BarrelRollDisplayed"]
+        data["RangeDisplayed"] = card["RangeDisplayed"]
+        data["RulerObject"] = card["RulerObject"]
+        data["Color"] = card["Color"]
+        data["LeftZone"] = card["LeftZone"]
+        data["HasButtons"] = card["HasButtons"]
+        save[card["GUID"]] = data
+    end
+    local save_string = JSON.encode_pretty(save)
+    return save_string
 end
 
 function onObjectLeaveScriptingZone(zone, object)
@@ -505,6 +567,10 @@ function update ()
             ship.setVar('Lock',false)
             ship.lock()
         end
+        if ship.getVar('Token') == true and ship.held_by_color == nil and ship.resting == true then
+            ship.setVar('Token',false)
+            tokens(ship.getGUID(),2)
+        end
     end
     --VALADIAN AI handling
     update_ai()
@@ -541,6 +607,7 @@ end
 
 function undo(guid)
     local obj = getObjectFromGUID(guid)
+    tokens(guid, 1)
     if undolist[guid] ~= nil then
         obj.setPosition(undopos[guid])
         obj.setRotation(undorot[guid])
@@ -855,8 +922,49 @@ function check(guid,move)
     check_ai(guid, move)
 end
 
-
-
+function tokens(guid, state)
+    -- guid of the ship with Tokens
+    -- state = 1 = save 2 = move
+    local obj = getObjectFromGUID(guid)
+    local pos = obj.getPosition()
+    local rot = obj.getRotation()
+    if state == 1 then
+        if tokenInfo ~= nil then
+            local index = {}
+            for i, token in ipairs(tokenInfo) do
+                if guid == token["ShipGUID"] then
+                    index[#index + 1] = i
+                end
+            end
+            for i=#index,1,-1 do
+                table.remove(tokenInfo, index[i])
+            end
+        end
+        for i, token in ipairs(getAllObjects()) do
+            local dist = distance(pos[1],pos[3],token.getPosition()[1],token.getPosition()[3])
+            if isBigShip(guid) == true then
+                dist = dist - 0.6
+            end
+            if token.tag == 'Chip' and dist < 1 then
+                local tokentable = {}
+                tokentable["GUID"] = token.getGUID()
+                tokentable["ShipGUID"] = guid
+                tokentable["Position"] = token.getPosition()
+                tokentable["Vector"] = {token.getPosition()[1]-pos[1],token.getPosition()[2]-pos[2],token.getPosition()[3]-pos[3]}
+                tokenInfo[#tokenInfo +1] = tokentable
+            end
+        end
+        obj.setVar('Token',true)
+    end
+    if state == 2 then
+        for i, token in ipairs(tokenInfo) do
+            if guid == token["ShipGUID"] then
+                local object = getObjectFromGUID(token["GUID"])
+                object.setPosition({pos[1] + token["Vector"][1], token["Position"][2],pos[3] + token["Vector"][3]})
+            end
+        end
+    end
+end
 
 function MiscMovement(guid,forwardDistance,type,direction,move,text)
     --guid = ship moving
@@ -864,6 +972,7 @@ function MiscMovement(guid,forwardDistance,type,direction,move,text)
     --direction = 0 left    1 right  2 forward
     --forwardDistance = distance to be traveled
     storeundo(guid)
+    tokens(guid, 1)
     local obj = getObjectFromGUID(guid)
     local shipname = obj.getName()
     local sidewaysDistance
@@ -910,8 +1019,6 @@ function MiscMovement(guid,forwardDistance,type,direction,move,text)
     notify(guid,move,text)
 end
 
-
-
 function turnShip(guid,radius,direction,type,kturn,move,text)
     --radius = turn radius
     --direction = 0  - left  1 - right
@@ -920,6 +1027,7 @@ function turnShip(guid,radius,direction,type,kturn,move,text)
     --guid = ship moving
     -- move and text for notify
     storeundo(guid)
+    tokens(guid, 1)
     local obj = getObjectFromGUID(guid)
     local rot = obj.getRotation()
     local pos = obj.getPosition()
@@ -932,24 +1040,47 @@ function turnShip(guid,radius,direction,type,kturn,move,text)
     local BumpingObjects = posbumps(guid, direction)
     local Bumped = {false, nil}
     local coords,theta = turncoords(guid,radius,direction,degree,type)
+    local forwardDistance, xDistance, zDistance
     if BumpingObjects ~= nil then
         for k=#BumpingObjects ,1,-1 do
             local doescollide = collide(pos[1]+coords[1],pos[3]+coords[2],rot[2]+theta,guid,BumpingObjects[k]["Position"][1],BumpingObjects[k]["Position"][3],BumpingObjects[k]["Rotation"][2],BumpingObjects[k]["ShipGUID"])
             if doescollide == true then
-                for e2=degree, 1, -1 do
-                    local checkdegree = e2
-                    coords,theta = turncoords(guid,radius,direction,checkdegree,type)
-                    local doescollide2 = collide(pos[1]+coords[1],pos[3]+coords[2],rot[2]+theta,guid,BumpingObjects[k]["Position"][1],BumpingObjects[k]["Position"][3],BumpingObjects[k]["Rotation"][2],BumpingObjects[k]["ShipGUID"])
+                forwardDistance = 0.734
+                if isBigShip(guid) == true then
+                    forwardDistance = forwardDistance * 2
+                end
+                for e2=1, 100, 1 do
+                    local checkdistance = forwardDistance*(e2/100)
+                    xDistance = math.sin(math.rad(rot[2]+theta)) * checkdistance * -1
+                    zDistance = math.cos(math.rad(rot[2]+theta)) * checkdistance * -1
+                    local doescollide2 = collide(pos[1]+coords[1]-xDistance,pos[3]+coords[2]-zDistance,rot[2]+theta,guid,BumpingObjects[k]["Position"][1],BumpingObjects[k]["Position"][3],BumpingObjects[k]["Rotation"][2],BumpingObjects[k]["ShipGUID"])
                     if doescollide2 == false then
-                        degree = checkdegree
+                        forwardDistance = 0
                         Bumped = {true, k}
                         break
+                    end
+                end
+                if forwardDistance ~= 0 then
+                    for e2=degree, 1, -1 do
+                        local checkdegree = e2
+                        coords,theta = turncoords(guid,radius,direction,checkdegree,type)
+                        local doescollide3 = collide(pos[1]+coords[1],pos[3]+coords[2],rot[2]+theta,guid,BumpingObjects[k]["Position"][1],BumpingObjects[k]["Position"][3],BumpingObjects[k]["Rotation"][2],BumpingObjects[k]["ShipGUID"])
+                        if doescollide3 == false then
+                            degree = checkdegree
+                            Bumped = {true, k}
+                            break
+                        end
                     end
                 end
             end
         end
     end
-    obj.setPosition({pos[1] + coords[1], 2, pos[3] + coords[2]})
+    if forwardDistance == 0 then
+        obj.setPosition({pos[1] + coords[1]-xDistance, 2, pos[3] + coords[2]-zDistance})
+    else
+        obj.setPosition({pos[1] + coords[1], 2, pos[3] + coords[2]})
+    end
+
     if kturn == true and Bumped[1] == false then
         theta = theta - 180
     end
@@ -964,13 +1095,13 @@ function turnShip(guid,radius,direction,type,kturn,move,text)
 end
 
 
-
 function straight(guid,forwardDistance,kturn,move,text)
     -- guid = ship moving
     -- forwardDistance = amount to move forwardDistance
     -- kturn true or false
     -- move and text for notify
     storeundo(guid)
+    tokens(guid, 1)
     local obj = getObjectFromGUID(guid)
     local pos = obj.getPosition()
     local rot = obj.getRotation()
@@ -1116,9 +1247,9 @@ function posbumps(guid, direction)
             local dot = dot2d({cv[1],cv[2]},{scv[1],scv[2]})
             if dot > 0 then
                 local circledist = distance(pos[1],pos[3],shippos[1],shippos[3])
-                if circledist < 8 then
+                if circledist < 12 then
                     local perp = calcPerpendicular({pos[1],pos[3]},{cv[1]+pos[1],cv[2]+pos[3]},{shippos[1],shippos[3]})
-                    if perp < 3.2 then
+                    if perp < 3.3 then
                         local BumpTable = {}
                         BumpTable["Position"] = ship.getPosition()
                         BumpTable["Rotation"] = ship.getRotation()
@@ -1921,7 +2052,9 @@ function RotateVector(direction, yRotation)
     local rotval = round(yRotation)
     local radrotval = math.rad(rotval)
     local xDistance = math.cos(radrotval) * direction[1] + math.sin(radrotval) * direction[3]
+    --TODO: Valadian Verify
     local zDistance = math.sin(radrotval) * direction[1] * -1 + math.cos(radrotval) * direction[3]
+    --local zDistance = math.sin(radrotval) * direction[1] + math.cos(radrotval) * direction[3]
     return {xDistance, direction[2], zDistance}
 end
 start_delay = ""
@@ -1999,6 +2132,9 @@ end
 function Action_End()
     --TODO: clear all buttons
     for i,obj in ipairs(getAllObjects()) do
+        if isShip(obj) then
+            obj.clearButtons()
+        end
         if isInPlay(obj) and isTemporary(obj) then
             obj.destruct()
         end
@@ -2903,6 +3039,7 @@ v = {
 
     _0600 = {x= 0, y= -4.5, rot=0}, --S
 
+    _0730 = {x= -4.5, y= -4.5, rot=45},
     _0800 = {x= -4.5, y= -3.0, rot=90},
     _0830 = {x= -4.5, y= -1.5, rot=90}, --v1 in Local Trouble
     _0900 = {x= -4.5, y= 0, rot=90}, --W
@@ -2984,7 +3121,7 @@ function Action_setupclear(object)
         --is in play or ai setup
         if pos[1]>-16.5 and pos[3]>-16.5 and pos[3]<16.5 then
             --is AI, card, or damage marker
-            if isAi(obj) or obj.tag=="Card" or obj.tag=="Deck" or obj.tag=="Chip" or obj.getName():match "Asteroid"or obj.getName():match "Debrisfield" then
+            if isAi(obj) or obj.tag=="Card" or obj.tag=="Deck" or obj.tag=="Chip" or obj.getName():match "Asteroid" or obj.getName():match "Cloud" or obj.getName():match "Debrisfield" then
                 obj.destruct()
                 --is player
             elseif not isAi(obj) and isShip(obj) and getSkill(obj)~=nil then
@@ -3249,6 +3386,10 @@ function Action_setup(object)
             table.insert(missionsquads, {name="Beta",turn=0,vector=5,ai="attack",type="*",count={0,0,0,6,0,4}, elite=false})
             table.insert(missionsquads, {name="Gamma",turn=4,vector="1d6",ai="attack",type="TIE",count={0,1,0,1,0,1}, elite=false})
             table.insert(missionsquads, {name="Gamma",turn=4,vector="1d6",ai="attack",type="INT",count={8,0,4,0,6,0}, elite=false})
+            table.insert(missionsquads, {name="Delta",turn=8,vector="1d6",ai="attack",type="TIE",count={1,1,1,-6,1,-4}, elite=false})
+            table.insert(missionsquads, {name="Delta",turn=8,vector="1d6",ai="attack",type="*",count={0,0,0,6,0,4}, elite=false})
+            table.insert(missionsquads, {name="Inspection",turn=9,vector="1d6",ai="strike",type="SHU",count={1,0,0,0,0,0}, elite=false})
+            table.insert(missionsquads, {name="Inspection",turn=9,vector="1d6",ai="strike",type="INT",count={0,0,1,8,1,6}, elite=false})
             --TODO: Spawn Satellite Relays
             --TODO: Spawn Station
             --TODO: spawn HWK-290
@@ -3290,9 +3431,9 @@ function Action_setup(object)
             table.insert(missionsquads, {name="Epsilon",turn=8,vector="1d12",ai="attack",type="INT",count={1,0,1,0,1,0}, elite=false})
             table.insert(missionsquads, {name="Epsilon",turn=8,vector="1d12",ai="attack",type="TIE",count={0,8,0,6,0,4}, elite=false})
             missionvectors = {v._0730,v._0830,v._0930,v._1030,v._1130,v._0030,v._0130,v._0230,v._0330,v._0430,v._0530,v._0630,
-                {x=-1.5, y=1.5,rot=90}, --C
+                {x=-1.5, y=1.5,rot=270}, --C
                 {x=-1.5, y=-1.5,rot=180}, --D
-                {x=1.5,y=-1.5,rot=270}, --E
+                {x=1.5,y=-1.5,rot=90}, --E
                 {x=1.5,y=1.5,rot=0}, --F
                 {x=0,y=0,rot=180}    --center
             }
